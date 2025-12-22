@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "serve -s dist -l $PORT"
   },
   "dependencies": {
     "@azure/msal-browser": "^4.27.0",
@@ -28,6 +29,7 @@
     "react-icons": "^5.5.0",
     "react-router-dom": "^7.10.1",
     "react-signature-canvas": "^1.1.0-alpha.2",
+    "serve": "^14.2.5",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3"
   },
