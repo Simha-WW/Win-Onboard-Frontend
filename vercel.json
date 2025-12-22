@@ -8,10 +8,5 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ],
-  "env": {
-    "VITE_AZURE_CLIENT_ID": "@vite_azure_client_id",
-    "VITE_AZURE_TENANT_ID": "@vite_azure_tenant_id",
-    "VITE_API_BASE_URL": "@vite_api_base_url"
-  }
+  ]
 }
