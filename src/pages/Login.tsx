@@ -192,7 +192,8 @@ export const Login: React.FC = () => {
     clearError();
     try {
       // Call the new HR login API endpoint
-      const apiUrl = 'http://localhost:3000/api/auth/hr/login';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.REACT_APP_API_BASE_URL || 'http://localhost:3000/api';
+      const apiUrl = `${API_BASE_URL}/auth/hr/login`;
       console.log('Calling HR login API:', apiUrl);
       console.log('Email:', hrEmail.trim());
       
