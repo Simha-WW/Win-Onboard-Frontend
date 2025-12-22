@@ -1,0 +1,3920 @@
+/**
+ * Documents Page - BGV (Background Verification) Document Submission
+ * Multi-section form for document submission and verification
+ */
+
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { FiUser, FiHome, FiBook, FiBriefcase, FiCreditCard, FiUpload, FiCheck, FiArrowRight, FiArrowLeft, FiSave } from 'react-icons/fi';
+
+interface BGVSection {
+  id: string;
+  title: string;
+  icon: React.ComponentType;
+  completed: boolean;
+}
+
+const sections: BGVSection[] = [
+  { id: 'demographics', title: 'Demographics', icon: FiUser, completed: false },
+  { id: 'personal', title: 'Personal Details', icon: FiHome, completed: false },
+  { id: 'education', title: 'Education', icon: FiBook, completed: false },
+  { id: 'employment', title: 'Employment History', icon: FiBriefcase, completed: false },
+  { id: 'passport', title: 'Passport & Visa', icon: FiCreditCard, completed: false },
+  { id: 'banking', title: 'Bank/PF/NPS', icon: FiCreditCard, completed: false },
+];
+
+// Utility function to convert file to base64
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove the data:mime;base64, prefix to get just the base64 string
+      const base64 = result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = error => reject(error);
+  });
+};
+
+export const Documents = () => {
+  console.log('BGV Documents component rendering...');
+  
+  const navigate = useNavigate();
+  const [activeSection, setActiveSection] = useState(0);
+  const [formData, setFormData] = useState({
+    demographics: {
+      // Basic Information
+      salutation: '',
+      firstName: '',
+      middleName: '',
+      lastName: '',
+      nameForRecords: '',
+      dobAsPerRecords: '',
+      celebratedDob: '',
+      gender: '',
+      bloodGroup: '',
+      whatsappNumber: '',
+      linkedinUrl: '',
+      // Identity & Documents
+      aadhaarNumber: '',
+      aadhaarFile: null,
+      panNumber: '',
+      panFile: null,
+      resumeFile: null,
+      // Address Section
+      communicationAddress: {
+        houseNo: '',
+        streetName: '',
+        city: '',
+        district: '',
+        state: ''
+      },
+      permanentAddress: {
+        houseNo: '',
+        streetName: '',
+        city: '',
+        district: '',
+        state: ''
+      },
+      sameAsCommAddress: false
+    },
+    personal: {
+      maritalStatus: '',
+      noOfChildren: '',
+      fatherName: '',
+      fatherDob: '',
+      fatherDeceased: false,
+      motherName: '',
+      motherDob: '',
+      motherDeceased: false,
+      emergencyContacts: [{ name: '', mobile: '', relationship: '' }]
+    },
+    education: {
+      qualifications: [{
+        qualification: '',
+        university_institution: '',
+        cgpa_percentage: '',
+        year_of_passing: '',
+        documentUrl: '',
+        documentName: '',
+        uploadingDocument: false
+      }],
+      additionalQualifications: []
+    },
+    employment: {
+      employmentHistory: [{
+        company_name: '',
+        designation: '',
+        employment_start_date: '',
+        employment_end_date: '',
+        reason_for_leaving: '',
+        offer_letter_url: '',
+        experience_letter_url: '',
+        payslips_url: ''
+      }]
+    },
+    passport: {
+      has_passport: false,
+      passport_number: '',
+      passport_issue_date: '',
+      passport_expiry_date: '',
+      passport_copy_url: '',
+      has_visa: false,
+      visa_type: '',
+      visa_expiry_date: '',
+      visa_document_url: ''
+    },
+    banking: {
+      number_of_bank_accounts: 1,
+      bank_account_number: '',
+      ifsc_code: '',
+      name_as_per_bank: '',
+      bank_name: '',
+      branch: '',
+      cancelled_cheque_url: '',
+      uan_pf_number: '',
+      pran_nps_number: ''
+    }
+  });
+
+  const [touchedFields, setTouchedFields] = useState({});
+  const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [prefilledData, setPrefilledData] = useState(null);
+
+  // Fetch user details on component mount
+  useEffect(() => {
+    const fetchBGVData = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        console.log('🔑 Auth token found:', token ? `Yes (${token.substring(0, 20)}...)` : 'No');
+        
+        if (!token) {
+          console.log('⚠️ No authentication token found in localStorage');
+          console.log('🔍 Available localStorage keys:', Object.keys(localStorage));
+          return;
+        }
+
+        console.log('📡 Making API call to /api/bgv/submission...');
+        
+        const response = await fetch('http://localhost:3000/api/bgv/submission', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        console.log('📊 Response status:', response.status);
+        console.log('📊 Response OK:', response.ok);
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('📋 Full BGV API response:', result);
+          
+          if (result.success) {
+            // Handle prefilled data from user profile
+            if (result.prefilledData) {
+              const data = result.prefilledData;
+              console.log('✅ Prefilled data:', data);
+              setPrefilledData(data);
+            }
+
+            // Handle saved BGV demographics data
+            if (result.savedDemographics) {
+              const saved = result.savedDemographics;
+              console.log('📋 Saved demographics found:', saved);
+              
+              // Map the saved data to form structure
+              const savedFormData = {
+                salutation: saved.salutation || '',
+                firstName: saved.first_name || '',
+                middleName: saved.middle_name || '',
+                lastName: saved.last_name || '',
+                nameForRecords: saved.name_for_records || '',
+                dobAsPerRecords: saved.dob_as_per_records ? new Date(saved.dob_as_per_records).toISOString().split('T')[0] : '',
+                celebratedDob: saved.celebrated_dob ? new Date(saved.celebrated_dob).toISOString().split('T')[0] : '',
+                gender: saved.gender || '',
+                bloodGroup: saved.blood_group || '',
+                whatsappNumber: saved.whatsapp_number || '',
+                linkedinUrl: saved.linkedin_url || '',
+                aadhaarNumber: saved.aadhaar_card_number || '',
+                panNumber: saved.pan_card_number || '',
+                // File upload information (create file-like objects to show upload status)
+                aadhaarFile: saved.aadhaar_file_name ? { 
+                  name: saved.aadhaar_file_name, 
+                  type: saved.aadhaar_file_type, 
+                  size: saved.aadhaar_file_size,
+                  uploaded: true 
+                } : null,
+                panFile: saved.pan_file_name ? { 
+                  name: saved.pan_file_name, 
+                  type: saved.pan_file_type, 
+                  size: saved.pan_file_size,
+                  uploaded: true 
+                } : null,
+                resumeFile: saved.resume_file_name ? { 
+                  name: saved.resume_file_name, 
+                  type: saved.resume_file_type, 
+                  size: saved.resume_file_size,
+                  uploaded: true 
+                } : null,
+                // Address Information (matching the form structure)
+                communicationAddress: {
+                  houseNo: saved.comm_house_number || '',
+                  streetName: saved.comm_street_name || '',
+                  city: saved.comm_city || '',
+                  district: saved.comm_district || '',
+                  state: saved.comm_state || ''
+                },
+                permanentAddress: {
+                  houseNo: saved.perm_house_number || '',
+                  streetName: saved.perm_street_name || '',
+                  city: saved.perm_city || '',
+                  district: saved.perm_district || '',
+                  state: saved.perm_state || ''
+                },
+                sameAsCommAddress: saved.perm_same_as_comm || false
+              };
+
+              // Update form data with saved data
+              setFormData(prev => ({
+                ...prev,
+                demographics: {
+                  ...prev.demographics,
+                  ...savedFormData
+                }
+              }));
+
+              console.log('✅ Form populated with saved data');
+            }
+
+            // Handle saved personal data
+            if (result.savedPersonal) {
+              const saved = result.savedPersonal;
+              console.log('📋 Saved personal found:', saved);
+              console.log('📋 Emergency contacts from DB:', saved.emergency_contacts);
+              console.log('📋 Emergency contacts type:', typeof saved.emergency_contacts);
+              console.log('📋 Emergency contacts is array?', Array.isArray(saved.emergency_contacts));
+
+              // Map backend field names to frontend field names
+              const emergencyContacts = saved.emergency_contacts && Array.isArray(saved.emergency_contacts) && saved.emergency_contacts.length > 0 
+                ? saved.emergency_contacts.map(contact => ({
+                    name: contact.contact_person_name || contact.name || '',
+                    mobile: contact.mobile || '',
+                    relationship: contact.relationship || ''
+                  }))
+                : [{ name: '', mobile: '', relationship: '' }];
+
+              console.log('📋 Setting emergency contacts to:', emergencyContacts);
+              console.log('📋 First contact details:', emergencyContacts[0]);
+
+              setFormData(prev => {
+                const newData = {
+                  ...prev,
+                  personal: {
+                    maritalStatus: saved.marital_status || '',
+                    noOfChildren: saved.num_children || '',
+                    fatherName: saved.father_name || '',
+                    fatherDob: saved.father_dob ? new Date(saved.father_dob).toISOString().split('T')[0] : '',
+                    fatherDeceased: saved.father_deceased || false,
+                    motherName: saved.mother_name || '',
+                    motherDob: saved.mother_dob ? new Date(saved.mother_dob).toISOString().split('T')[0] : '',
+                    motherDeceased: saved.mother_deceased || false,
+                    emergencyContacts: emergencyContacts
+                  }
+                };
+                console.log('📋 New form data after personal update:', newData);
+                return newData;
+              });
+
+              console.log('✅ Form populated with saved personal data');
+              console.log('✅ Emergency contacts loaded:', emergencyContacts);
+            }
+
+            // Handle saved education data
+            if (result.savedEducation) {
+              const saved = result.savedEducation;
+              console.log('📋 Saved education found:', saved);
+              console.log('📋 Educational qualifications:', saved.educationalQualifications);
+              console.log('📋 Additional qualifications:', saved.additionalQualifications);
+
+              const educationalQualifications = saved.educationalQualifications && saved.educationalQualifications.length > 0
+                ? saved.educationalQualifications 
+                : [{
+                    qualification: '',
+                    university_institution: '',
+                    cgpa_percentage: '',
+                    year_of_passing: '',
+                    documentUrl: '',
+                    documentName: '',
+                    uploadingDocument: false
+                  }];
+
+              console.log('📋 Setting qualifications to:', educationalQualifications);
+              console.log('📋 First qualification details:', educationalQualifications[0]);
+
+              setFormData(prev => {
+                const newData = {
+                  ...prev,
+                  education: {
+                    qualifications: educationalQualifications,
+                    additionalQualifications: saved.additionalQualifications || []
+                  }
+                };
+                console.log('📋 New form data after education update:', newData);
+                return newData;
+              });
+
+              console.log('✅ Form populated with saved education data');
+            }
+
+            // Handle saved employment data
+            if (result.savedEmployment) {
+              const saved = result.savedEmployment;
+              console.log('📋 Saved employment found:', saved);
+
+              const employmentHistory = saved.employmentHistory && saved.employmentHistory.length > 0
+                ? saved.employmentHistory.map(emp => ({
+                    company_name: emp.company_name || '',
+                    designation: emp.designation || '',
+                    employment_start_date: emp.employment_start_date ? new Date(emp.employment_start_date).toISOString().split('T')[0] : '',
+                    employment_end_date: emp.employment_end_date ? new Date(emp.employment_end_date).toISOString().split('T')[0] : '',
+                    reason_for_leaving: emp.reason_for_leaving || '',
+                    offer_letter_url: emp.offer_letter_url || '',
+                    experience_letter_url: emp.experience_letter_url || '',
+                    payslips_url: emp.payslips_url || ''
+                  }))
+                : [{
+                    company_name: '',
+                    designation: '',
+                    employment_start_date: '',
+                    employment_end_date: '',
+                    reason_for_leaving: '',
+                    offer_letter_url: '',
+                    experience_letter_url: '',
+                    payslips_url: ''
+                  }];
+
+              setFormData(prev => ({
+                ...prev,
+                employment: {
+                  employmentHistory: employmentHistory
+                }
+              }));
+
+              console.log('✅ Form populated with saved employment data');
+            }
+
+            // Handle saved passport/visa data
+            if (result.savedPassportVisa) {
+              const saved = result.savedPassportVisa;
+              console.log('📋 Saved passport/visa found:', saved);
+
+              setFormData(prev => ({
+                ...prev,
+                passport: {
+                  has_passport: saved.has_passport || false,
+                  passport_number: saved.passport_number || '',
+                  passport_issue_date: saved.passport_issue_date ? new Date(saved.passport_issue_date).toISOString().split('T')[0] : '',
+                  passport_expiry_date: saved.passport_expiry_date ? new Date(saved.passport_expiry_date).toISOString().split('T')[0] : '',
+                  passport_copy_url: saved.passport_copy_url || '',
+                  has_visa: saved.has_visa || false,
+                  visa_type: saved.visa_type || '',
+                  visa_expiry_date: saved.visa_expiry_date ? new Date(saved.visa_expiry_date).toISOString().split('T')[0] : '',
+                  visa_document_url: saved.visa_document_url || ''
+                }
+              }));
+
+              console.log('✅ Form populated with saved passport/visa data');
+            }
+
+            // Handle saved bank/pf/nps data
+            if (result.savedBankPfNps) {
+              const saved = result.savedBankPfNps;
+              console.log('📋 Saved bank/pf/nps found:', saved);
+
+              setFormData(prev => ({
+                ...prev,
+                banking: {
+                  number_of_bank_accounts: saved.number_of_bank_accounts || 1,
+                  bank_account_number: saved.bank_account_number || '',
+                  ifsc_code: saved.ifsc_code || '',
+                  name_as_per_bank: saved.name_as_per_bank || '',
+                  bank_name: saved.bank_name || '',
+                  branch: saved.branch || '',
+                  cancelled_cheque_url: saved.cancelled_cheque_url || '',
+                  uan_pf_number: saved.uan_pf_number || '',
+                  pran_nps_number: saved.pran_nps_number || ''
+                }
+              }));
+
+              console.log('✅ Form populated with saved bank/pf/nps data');
+            }
+
+            if (result.prefilledData && !result.savedDemographics) {
+              // Only use prefilled data if no saved data exists
+              const data = result.prefilledData;
+              const autoFillValues = {
+                firstName: data.first_name || '',
+                lastName: data.last_name || '',
+                nameForRecords: data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : ''
+              };
+
+              setFormData(prev => ({
+                ...prev,
+                demographics: {
+                  ...prev.demographics,
+                  ...autoFillValues
+                }
+              }));
+
+              console.log('✅ Form populated with prefilled data');
+            }
+          } else {
+            console.error('❌ API response not successful:', result);
+          }
+        } else {
+          const errorText = await response.text();
+          console.error('❌ API request failed:', response.status, response.statusText, errorText);
+        }
+      } catch (error) {
+        console.error('Error fetching BGV data:', error);
+      }
+    };
+
+    fetchBGVData();
+  }, []);
+
+  // Validation functions
+  const validateField = (fieldName: string, value: any, formSection: string = 'demographics') => {
+    let error = '';
+
+    switch (fieldName) {
+      case 'firstName':
+      case 'lastName':
+        if (!value.trim()) error = 'This field is required';
+        else if (!/^[a-zA-Z\s]+$/.test(value)) error = 'Only alphabets are allowed';
+        break;
+      case 'nameForRecords':
+        if (!value.trim()) error = 'Full official name is required';
+        break;
+      case 'dobAsPerRecords':
+      case 'celebratedDob':
+        if (!value) error = 'Date is required';
+        else if (new Date(value) > new Date()) error = 'Future dates are not allowed';
+        break;
+      case 'salutation':
+      case 'gender':
+      case 'bloodGroup':
+        if (!value) error = 'Please select an option';
+        break;
+      case 'whatsappNumber':
+        if (!value.trim()) error = 'WhatsApp number is required';
+        else if (!/^\+?[\d\s-()]+$/.test(value)) error = 'Invalid phone number format';
+        break;
+      case 'linkedinUrl':
+        if (value && !/^https:\/\/(www\.)?linkedin\.com\/in\//.test(value)) {
+          error = 'Please enter a valid LinkedIn profile URL';
+        }
+        break;
+      case 'aadhaarNumber':
+        if (!value.trim()) error = 'Aadhaar number is required';
+        else if (!/^\d{12}$/.test(value.replace(/\s/g, ''))) error = 'Aadhaar must be 12 digits';
+        break;
+      case 'panNumber':
+        if (!value.trim()) error = 'PAN number is required';
+        else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(value.toUpperCase())) {
+          error = 'Invalid PAN format (e.g., ABCDE1234F)';
+        }
+        break;
+      case 'aadhaarFile':
+      case 'panFile':
+        if (!value) error = 'Document is required';
+        break;
+      case 'resumeFile':
+        if (!value) error = 'Resume is required';
+        break;
+      default:
+        if (fieldName.includes('Address') && !value?.trim()) {
+          error = 'This field is required';
+        }
+        break;
+    }
+
+    return error;
+  };
+
+  const handleInputChange = (section: string, field: string, value: any) => {
+    setFormData(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value
+      }
+    }));
+
+    // Mark field as touched
+    setTouchedFields(prev => ({
+      ...prev,
+      [`${section}.${field}`]: true
+    }));
+
+    // Validate and set error
+    const error = validateField(field, value, section);
+    setErrors(prev => ({
+      ...prev,
+      [`${section}.${field}`]: error
+    }));
+  };
+
+  const handleAddressChange = (addressType: 'communicationAddress' | 'permanentAddress', field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      demographics: {
+        ...prev.demographics,
+        [addressType]: {
+          ...prev.demographics[addressType],
+          [field]: value
+        }
+      }
+    }));
+  };
+
+  const handleSameAddressChange = (checked: boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      demographics: {
+        ...prev.demographics,
+        sameAsCommAddress: checked,
+        permanentAddress: checked 
+          ? { ...prev.demographics.communicationAddress }
+          : {
+              houseNo: '',
+              streetName: '',
+              city: '',
+              district: '',
+              state: ''
+            }
+      }
+    }));
+  };
+
+  const handleFileUpload = (field: string, file: File | null) => {
+    if (file) {
+      const maxSize = field === 'resumeFile' ? 10 * 1024 * 1024 : 5 * 1024 * 1024; // 10MB for resume, 5MB for documents
+      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+
+      if (file.size > maxSize) {
+        setErrors(prev => ({
+          ...prev,
+          [`demographics.${field}`]: `File size must be less than ${field === 'resumeFile' ? '10MB' : '5MB'}`
+        }));
+        return;
+      }
+
+      if (!allowedTypes.includes(file.type)) {
+        setErrors(prev => ({
+          ...prev,
+          [`demographics.${field}`]: 'Only PDF, JPG, JPEG, PNG files are allowed'
+        }));
+        return;
+      }
+    }
+
+    handleInputChange('demographics', field, file);
+  };
+
+  // Handle employment file selection (store file, upload on save)
+  const handleEmploymentFileUpload = async (index: number, field: 'offer_letter_url' | 'experience_letter_url' | 'payslips_url', file: File) => {
+    try {
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+
+      if (file.size > maxSize) {
+        alert('File size must be less than 5MB');
+        return;
+      }
+
+      if (!allowedTypes.includes(file.type)) {
+        alert('Only PDF, JPG, JPEG, PNG files are allowed');
+        return;
+      }
+
+      console.log('📎 Employment file selected:', { field, fileName: file.name, index });
+
+      // Store file in formData (will be uploaded when saving)
+      const newHistory = [...formData.employment.employmentHistory];
+      const fileKey = field.replace('_url', '_file');
+      newHistory[index][fileKey] = file;
+      newHistory[index][`${fileKey}_name`] = file.name;
+      setFormData(prev => ({ ...prev, employment: { ...prev.employment, employmentHistory: newHistory } }));
+      
+      console.log(`✅ ${field} file stored, will upload on save`);
+    } catch (error) {
+      console.error(`❌ Error selecting ${field}:`, error);
+      alert(`Failed to select ${field}: ${error.message}`);
+    }
+  };
+
+  // Handle passport/visa file selection (store file, upload on save)
+  const handlePassportFileUpload = async (field: 'passport_copy_url' | 'visa_document_url', file: File) => {
+    try {
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+
+      if (file.size > maxSize) {
+        alert('File size must be less than 5MB');
+        return;
+      }
+
+      if (!allowedTypes.includes(file.type)) {
+        alert('Only PDF, JPG, JPEG, PNG files are allowed');
+        return;
+      }
+
+      console.log('📎 Passport/visa file selected:', { field, fileName: file.name });
+
+      // Store file in formData (will be uploaded when saving)
+      const fileKey = field.replace('_url', '_file');
+      setFormData(prev => ({ 
+        ...prev, 
+        passport: { 
+          ...prev.passport, 
+          [fileKey]: file,
+          [`${fileKey}_name`]: file.name
+        } 
+      }));
+      
+      console.log(`✅ ${field} file stored, will upload on save`);
+    } catch (error) {
+      console.error(`❌ Error selecting ${field}:`, error);
+      alert(`Failed to select ${field}: ${error.message}`);
+    }
+  };
+
+  // Handle banking file selection (store file, upload on save)
+  const handleBankingFileUpload = async (field: 'cancelled_cheque_url', file: File) => {
+    try {
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+
+      if (file.size > maxSize) {
+        alert('File size must be less than 5MB');
+        return;
+      }
+
+      if (!allowedTypes.includes(file.type)) {
+        alert('Only PDF, JPG, JPEG, PNG files are allowed');
+        return;
+      }
+
+      console.log('📎 Banking file selected:', { field, fileName: file.name });
+
+      // Store file in formData (will be uploaded when saving)
+      const fileKey = field.replace('_url', '_file');
+      setFormData(prev => ({ 
+        ...prev, 
+        banking: { 
+          ...prev.banking, 
+          [fileKey]: file,
+          [`${fileKey}_name`]: file.name
+        } 
+      }));
+      
+      console.log(`✅ ${field} file stored, will upload on save`);
+    } catch (error) {
+      console.error('❌ Error storing banking file:', error);
+      alert('Failed to store file. Please try again.');
+    }
+  };
+
+  const handleSectionChange = (sectionIndex: number) => {
+    setActiveSection(sectionIndex);
+  };
+
+  // Validate personal section
+  const validatePersonalSection = () => {
+    const errors = [];
+
+    // Marital Status is required
+    if (!formData.personal.maritalStatus) {
+      errors.push('Marital Status is required');
+    }
+
+    // Father Name is required
+    if (!formData.personal.fatherName || !formData.personal.fatherName.trim()) {
+      errors.push("Father's Name is required");
+    }
+
+    // Mother Name is required
+    if (!formData.personal.motherName || !formData.personal.motherName.trim()) {
+      errors.push("Mother's Name is required");
+    }
+
+    // At least one emergency contact required
+    if (!formData.personal.emergencyContacts || formData.personal.emergencyContacts.length === 0) {
+      errors.push('At least one emergency contact is required');
+    } else {
+      // Validate each emergency contact
+      const validContacts = formData.personal.emergencyContacts.filter(
+        contact => contact.name.trim() && contact.mobile.trim() && contact.relationship
+      );
+      
+      if (validContacts.length === 0) {
+        errors.push('At least one complete emergency contact is required');
+      }
+
+      // Check for duplicate mobile numbers
+      const mobiles = formData.personal.emergencyContacts.map(c => c.mobile).filter(m => m.trim());
+      const uniqueMobiles = new Set(mobiles);
+      if (mobiles.length !== uniqueMobiles.size) {
+        errors.push('Duplicate mobile numbers are not allowed in emergency contacts');
+      }
+
+      // Validate mobile number length for each contact
+      formData.personal.emergencyContacts.forEach((contact, index) => {
+        if (contact.mobile && (contact.mobile.length < 10 || contact.mobile.length > 15)) {
+          errors.push(`Emergency contact ${index + 1}: Mobile number must be 10-15 digits`);
+        }
+      });
+    }
+
+    return errors;
+  };
+
+  // Save personal section
+  const handleSavePersonal = async () => {
+    const validationErrors = validatePersonalSection();
+    if (validationErrors.length > 0) {
+      alert('Please fix the following errors:\n\n' + validationErrors.join('\n'));
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const dataToSave = {
+        marital_status: formData.personal.maritalStatus,
+        no_of_children: formData.personal.noOfChildren || 0,
+        father_name: formData.personal.fatherName,
+        father_dob: formData.personal.fatherDob || null,
+        father_deceased: formData.personal.fatherDeceased,
+        mother_name: formData.personal.motherName,
+        mother_dob: formData.personal.motherDob || null,
+        mother_deceased: formData.personal.motherDeceased,
+        emergency_contacts: formData.personal.emergencyContacts.filter(
+          contact => contact.name.trim() && contact.mobile.trim() && contact.relationship
+        )
+      };
+
+      const response = await fetch('http://localhost:3000/api/bgv/personal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(dataToSave)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('Personal information saved successfully!');
+      } else {
+        throw new Error(result.message || 'Failed to save personal information');
+      }
+    } catch (error) {
+      console.error('Error saving personal information:', error);
+      alert('Failed to save personal information. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Education handlers
+  const handleAddEducation = () => {
+    setFormData(prev => ({
+      ...prev,
+      education: {
+        ...prev.education,
+        qualifications: [
+          ...(prev.education.qualifications || []),
+          {
+            qualification: '',
+            university_institution: '',
+            cgpa_percentage: '',
+            year_of_passing: '',
+            documentUrl: '',
+            documentName: '',
+            uploadingDocument: false
+          }
+        ]
+      }
+    }));
+  };
+
+  const handleRemoveEducation = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      education: {
+        ...prev.education,
+        qualifications: prev.education.qualifications.filter((_, i) => i !== index)
+      }
+    }));
+  };
+
+  const handleEducationChange = (index: number, field: string, value: any) => {
+    setFormData(prev => {
+      const newQualifications = [...prev.education.qualifications];
+      newQualifications[index] = {
+        ...newQualifications[index],
+        [field]: value
+      };
+      return {
+        ...prev,
+        education: {
+          ...prev.education,
+          qualifications: newQualifications
+        }
+      };
+    });
+  };
+
+  const handleEducationFileUpload = async (index: number, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    try {
+      const file = files[0]; // Only take the first file
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      
+      if (!validTypes.includes(file.type)) {
+        alert(`Invalid file type. Only PDF, JPG, JPEG, and PNG are allowed.`);
+        return;
+      }
+      if (file.size > maxSize) {
+        alert(`File size exceeds 5MB limit.`);
+        return;
+      }
+
+      // Store file data (will be uploaded when form is saved)
+      setFormData(prev => {
+        const newQualifications = [...prev.education.qualifications];
+        newQualifications[index] = {
+          ...newQualifications[index],
+          file: file,
+          documentName: file.name
+        };
+        return {
+          ...prev,
+          education: {
+            ...prev.education,
+            qualifications: newQualifications
+          }
+        };
+      });
+
+    } catch (error) {
+      console.error('Error selecting file:', error);
+      alert('Failed to select file. Please try again.');
+    }
+  };
+
+  const handleAddAdditionalQualification = () => {
+    setFormData(prev => ({
+      ...prev,
+      education: {
+        ...prev.education,
+        additionalQualifications: [
+          ...(prev.education.additionalQualifications || []),
+          {
+            certificate_name: '',
+            documentUrl: '',
+            documentName: '',
+            uploadingDocument: false
+          }
+        ]
+      }
+    }));
+  };
+
+  const handleRemoveAdditionalQualification = (index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      education: {
+        ...prev.education,
+        additionalQualifications: prev.education.additionalQualifications.filter((_, i) => i !== index)
+      }
+    }));
+  };
+
+  const handleAdditionalQualificationChange = (index: number, field: string, value: any) => {
+    setFormData(prev => {
+      const newQualifications = [...prev.education.additionalQualifications];
+      newQualifications[index] = {
+        ...newQualifications[index],
+        [field]: value
+      };
+      return {
+        ...prev,
+        education: {
+          ...prev.education,
+          additionalQualifications: newQualifications
+        }
+      };
+    });
+  };
+
+  const handleAdditionalQualificationFileUpload = async (index: number, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    try {
+      const file = files[0]; // Only take the first file
+      const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      
+      if (!validTypes.includes(file.type)) {
+        alert(`Invalid file type. Only PDF, JPG, JPEG, and PNG are allowed.`);
+        return;
+      }
+      if (file.size > maxSize) {
+        alert(`File size exceeds 5MB limit.`);
+        return;
+      }
+
+      // Store file data (will be uploaded when form is saved)
+      setFormData(prev => {
+        const newQualifications = [...prev.education.additionalQualifications];
+        newQualifications[index] = {
+          ...newQualifications[index],
+          file: file,
+          documentName: file.name
+        };
+        return {
+          ...prev,
+          education: {
+            ...prev.education,
+            additionalQualifications: newQualifications
+          }
+        };
+      });
+
+    } catch (error) {
+      console.error('Error selecting file:', error);
+      alert('Failed to select file. Please try again.');
+    }
+  };
+
+  // Validate education section
+  const validateEducationSection = () => {
+    const errors = [];
+
+    // At least one educational qualification required
+    if (!formData.education.qualifications || formData.education.qualifications.length === 0) {
+      errors.push('At least one educational qualification is required');
+      return errors;
+    }
+
+    // Validate each qualification
+    formData.education.qualifications.forEach((qual, index) => {
+      if (!qual.qualification) {
+        errors.push(`Qualification ${index + 1}: Qualification type is required`);
+      }
+      if (!qual.university_institution || !qual.university_institution.trim()) {
+        errors.push(`Qualification ${index + 1}: University/Institution is required`);
+      }
+      if (!qual.cgpa_percentage || !qual.cgpa_percentage.trim()) {
+        errors.push(`Qualification ${index + 1}: CGPA/Percentage is required`);
+      }
+      if (!qual.year_of_passing) {
+        errors.push(`Qualification ${index + 1}: Year of Passing is required`);
+      } else {
+        const year = parseInt(qual.year_of_passing);
+        const currentYear = new Date().getFullYear();
+        if (year > currentYear) {
+          errors.push(`Qualification ${index + 1}: Year of Passing cannot be in the future`);
+        }
+        if (year < 1950) {
+          errors.push(`Qualification ${index + 1}: Year of Passing must be after 1950`);
+        }
+      }
+      // Document validation - check for file or documentUrl
+      if (!qual.file && !qual.documentUrl && !qual.documentName) {
+        errors.push(`Qualification ${index + 1}: At least one document is required`);
+      }
+    });
+
+    // Validate additional qualifications if any
+    if (formData.education.additionalQualifications && formData.education.additionalQualifications.length > 0) {
+      formData.education.additionalQualifications.forEach((cert, index) => {
+        if (!cert.certificate_name || !cert.certificate_name.trim()) {
+          errors.push(`Additional Qualification ${index + 1}: Certificate name is required`);
+        }
+        // Document validation - check for file or documentUrl
+        if (!cert.file && !cert.documentUrl && !cert.documentName) {
+          errors.push(`Additional Qualification ${index + 1}: At least one document is required`);
+        }
+      });
+    }
+
+    return errors;
+  };
+
+  // Validate employment section
+  const validateEmploymentSection = () => {
+    const errors = [];
+
+    // Check if at least one employment record exists
+    if (!formData.employment.employmentHistory || formData.employment.employmentHistory.length === 0) {
+      errors.push('At least one employment record is required');
+      return errors;
+    }
+
+    // Validate each employment record
+    formData.employment.employmentHistory.forEach((emp, index) => {
+      if (!emp.company_name || !emp.company_name.trim()) {
+        errors.push(`Employment ${index + 1}: Company name is required`);
+      }
+      if (!emp.designation || !emp.designation.trim()) {
+        errors.push(`Employment ${index + 1}: Designation is required`);
+      }
+      if (!emp.employment_start_date) {
+        errors.push(`Employment ${index + 1}: Start date is required`);
+      }
+      if (!emp.employment_end_date) {
+        errors.push(`Employment ${index + 1}: End date is required`);
+      }
+      // Validate date range
+      if (emp.employment_start_date && emp.employment_end_date) {
+        const startDate = new Date(emp.employment_start_date);
+        const endDate = new Date(emp.employment_end_date);
+        if (endDate < startDate) {
+          errors.push(`Employment ${index + 1}: End date must be after start date`);
+        }
+      }
+    });
+
+    return errors;
+  };
+
+  // Validate passport section
+  const validatePassportSection = () => {
+    const errors = [];
+
+    // If user has passport, validate passport fields
+    if (formData.passport.has_passport) {
+      if (!formData.passport.passport_number || !formData.passport.passport_number.trim()) {
+        errors.push('Passport number is required');
+      }
+      if (!formData.passport.passport_issue_date) {
+        errors.push('Passport issue date is required');
+      }
+      if (!formData.passport.passport_expiry_date) {
+        errors.push('Passport expiry date is required');
+      }
+      // Validate passport dates
+      if (formData.passport.passport_issue_date && formData.passport.passport_expiry_date) {
+        const issueDate = new Date(formData.passport.passport_issue_date);
+        const expiryDate = new Date(formData.passport.passport_expiry_date);
+        if (expiryDate <= issueDate) {
+          errors.push('Passport expiry date must be after issue date');
+        }
+      }
+    }
+
+    // If user has visa, validate visa fields
+    if (formData.passport.has_visa) {
+      if (!formData.passport.visa_type || !formData.passport.visa_type.trim()) {
+        errors.push('Visa type is required');
+      }
+      if (!formData.passport.visa_expiry_date) {
+        errors.push('Visa expiry date is required');
+      }
+    }
+
+    return errors;
+  };
+
+  // Validate banking section
+  const validateBankingSection = () => {
+    const errors = [];
+
+    // Bank account details are required
+    if (!formData.banking.bank_account_number || !formData.banking.bank_account_number.trim()) {
+      errors.push('Bank account number is required');
+    }
+    if (!formData.banking.ifsc_code || !formData.banking.ifsc_code.trim()) {
+      errors.push('IFSC code is required');
+    } else if (formData.banking.ifsc_code.length !== 11) {
+      errors.push('IFSC code must be 11 characters');
+    }
+    if (!formData.banking.name_as_per_bank || !formData.banking.name_as_per_bank.trim()) {
+      errors.push('Name as per bank is required');
+    }
+    if (!formData.banking.bank_name || !formData.banking.bank_name.trim()) {
+      errors.push('Bank name is required');
+    }
+    if (!formData.banking.branch || !formData.banking.branch.trim()) {
+      errors.push('Branch name is required');
+    }
+
+    return errors;
+  };
+
+  // Save and navigate to next section
+  const handleSaveAndNext = async () => {
+    const section = sections[activeSection];
+    let validationErrors = [];
+
+    if (section.id === 'personal') {
+      validationErrors = validatePersonalSection();
+    } else if (section.id === 'education') {
+      validationErrors = validateEducationSection();
+    }
+
+    if (validationErrors.length > 0) {
+      alert('Please complete all required fields before proceeding:\n\n' + validationErrors.join('\n'));
+      return;
+    }
+    
+    await handleSave();
+    if (activeSection < sections.length - 1) {
+      setActiveSection(activeSection + 1);
+    }
+  };
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const section = sections[activeSection];
+      console.log('💾 handleSave called for section:', section.id);
+      console.log('💾 Current formData:', formData);
+      console.log('💾 Emergency contacts in formData:', formData.personal.emergencyContacts);
+
+      let apiEndpoint = '';
+      let dataToSave = {};
+
+      // Determine which section to save and prepare data
+      switch (section.id) {
+        case 'demographics':
+          apiEndpoint = '/api/bgv/demographics';
+          dataToSave = {
+            salutation: formData.demographics.salutation,
+            first_name: formData.demographics.firstName,
+            middle_name: formData.demographics.middleName,
+            last_name: formData.demographics.lastName,
+            name_for_records: formData.demographics.nameForRecords,
+            dob_as_per_records: formData.demographics.dobAsPerRecords,
+            celebrated_dob: formData.demographics.celebratedDob,
+            gender: formData.demographics.gender,
+            blood_group: formData.demographics.bloodGroup,
+            whatsapp_number: formData.demographics.whatsappNumber,
+            linkedin_url: formData.demographics.linkedinUrl,
+            aadhaar_card_number: formData.demographics.aadhaarNumber,
+            pan_card_number: formData.demographics.panNumber,
+            comm_house_number: formData.demographics.communicationAddress?.houseNo || '',
+            comm_street_name: formData.demographics.communicationAddress?.streetName || '',
+            comm_city: formData.demographics.communicationAddress?.city || '',
+            comm_district: formData.demographics.communicationAddress?.district || '',
+            comm_state: formData.demographics.communicationAddress?.state || '',
+            comm_country: formData.demographics.communicationAddress?.country || 'India',
+            comm_pin_code: formData.demographics.communicationAddress?.pinCode || '',
+            perm_same_as_comm: formData.demographics.permanentSameAsCommunication || false,
+            perm_house_number: formData.demographics.permanentAddress?.houseNo || '',
+            perm_street_name: formData.demographics.permanentAddress?.streetName || '',
+            perm_city: formData.demographics.permanentAddress?.city || '',
+            perm_district: formData.demographics.permanentAddress?.district || '',
+            perm_state: formData.demographics.permanentAddress?.state || '',
+            perm_country: formData.demographics.permanentAddress?.country || 'India',
+            perm_pin_code: formData.demographics.permanentAddress?.pinCode || ''
+          };
+          
+          // Handle file uploads by converting to base64 (only for new uploads, not previously uploaded files)
+          if (formData.demographics.aadhaarFile && !formData.demographics.aadhaarFile.uploaded) {
+            const aadhaarBase64 = await fileToBase64(formData.demographics.aadhaarFile);
+            dataToSave.aadhaar_file_data = aadhaarBase64;
+            dataToSave.aadhaar_file_name = formData.demographics.aadhaarFile.name;
+            dataToSave.aadhaar_file_type = formData.demographics.aadhaarFile.type;
+            dataToSave.aadhaar_file_size = formData.demographics.aadhaarFile.size;
+          }
+          
+          if (formData.demographics.panFile && !formData.demographics.panFile.uploaded) {
+            const panBase64 = await fileToBase64(formData.demographics.panFile);
+            dataToSave.pan_file_data = panBase64;
+            dataToSave.pan_file_name = formData.demographics.panFile.name;
+            dataToSave.pan_file_type = formData.demographics.panFile.type;
+            dataToSave.pan_file_size = formData.demographics.panFile.size;
+          }
+          
+          if (formData.demographics.resumeFile && !formData.demographics.resumeFile.uploaded) {
+            const resumeBase64 = await fileToBase64(formData.demographics.resumeFile);
+            dataToSave.resume_file_data = resumeBase64;
+            dataToSave.resume_file_name = formData.demographics.resumeFile.name;
+            dataToSave.resume_file_type = formData.demographics.resumeFile.type;
+            dataToSave.resume_file_size = formData.demographics.resumeFile.size;
+          }
+          break;
+        case 'personal':
+          apiEndpoint = '/api/bgv/personal';
+          dataToSave = {
+            marital_status: formData.personal.maritalStatus,
+            no_of_children: formData.personal.noOfChildren || 0,
+            father_name: formData.personal.fatherName,
+            father_dob: formData.personal.fatherDob,
+            father_deceased: formData.personal.fatherDeceased,
+            mother_name: formData.personal.motherName,
+            mother_dob: formData.personal.motherDob,
+            mother_deceased: formData.personal.motherDeceased,
+            emergency_contacts: formData.personal.emergencyContacts
+          };
+          console.log('📤 Sending personal data:', dataToSave);
+          console.log('📤 Emergency contacts being sent:', dataToSave.emergency_contacts);
+          break;
+        case 'education':
+          apiEndpoint = '/api/bgv/education';
+          
+          // Process educational qualifications with file uploads
+          const processedQualifications = await Promise.all(
+            (formData.education.qualifications || []).map(async (qual) => {
+              const processed = {
+                qualification: qual.qualification,
+                university_institution: qual.university_institution,
+                cgpa_percentage: qual.cgpa_percentage,
+                year_of_passing: qual.year_of_passing
+              };
+              
+              // If there's a file, convert to base64 and include metadata
+              if (qual.file) {
+                const base64Data = await fileToBase64(qual.file);
+                processed.file_data = base64Data;
+                processed.file_name = qual.file.name;
+                processed.file_type = qual.file.type;
+                processed.file_size = qual.file.size;
+              }
+              
+              return processed;
+            })
+          );
+          
+          // Process additional qualifications with file uploads
+          const processedAdditional = await Promise.all(
+            (formData.education.additionalQualifications || []).map(async (cert) => {
+              const processed = {
+                certificate_name: cert.certificate_name
+              };
+              
+              // If there's a file, convert to base64 and include metadata
+              if (cert.file) {
+                const base64Data = await fileToBase64(cert.file);
+                processed.file_data = base64Data;
+                processed.file_name = cert.file.name;
+                processed.file_type = cert.file.type;
+                processed.file_size = cert.file.size;
+              }
+              
+              return processed;
+            })
+          );
+          
+          dataToSave = {
+            educationalQualifications: processedQualifications,
+            additionalQualifications: processedAdditional
+          };
+          break;
+        case 'employment':
+          apiEndpoint = '/api/bgv/employment';
+          
+          // Process employment history with file uploads
+          const processedEmployment = await Promise.all(
+            (formData.employment.employmentHistory || []).map(async (emp) => {
+              const processed = {
+                company_name: emp.company_name,
+                designation: emp.designation,
+                employment_start_date: emp.employment_start_date,
+                employment_end_date: emp.employment_end_date,
+                reason_for_leaving: emp.reason_for_leaving || ''
+              };
+              
+              // Convert offer letter file to base64 if present
+              if (emp.offer_letter_file) {
+                const base64Data = await fileToBase64(emp.offer_letter_file);
+                processed.offer_letter_file = base64Data;
+                processed.offer_letter_file_name = emp.offer_letter_file_name || emp.offer_letter_file.name;
+              }
+              
+              // Convert experience letter file to base64 if present
+              if (emp.experience_letter_file) {
+                const base64Data = await fileToBase64(emp.experience_letter_file);
+                processed.experience_letter_file = base64Data;
+                processed.experience_letter_file_name = emp.experience_letter_file_name || emp.experience_letter_file.name;
+              }
+              
+              // Convert payslips file to base64 if present
+              if (emp.payslips_file) {
+                const base64Data = await fileToBase64(emp.payslips_file);
+                processed.payslips_file = base64Data;
+                processed.payslips_file_name = emp.payslips_file_name || emp.payslips_file.name;
+              }
+              
+              return processed;
+            })
+          );
+          
+          dataToSave = processedEmployment;
+          console.log('📤 Sending employment data:', dataToSave);
+          break;
+        case 'passport':
+          apiEndpoint = '/api/bgv/passport-visa';
+          
+          // Prepare passport data with file conversion
+          dataToSave = {
+            has_passport: formData.passport.has_passport,
+            passport_number: formData.passport.has_passport ? formData.passport.passport_number : null,
+            passport_issue_date: formData.passport.has_passport ? formData.passport.passport_issue_date : null,
+            passport_expiry_date: formData.passport.has_passport ? formData.passport.passport_expiry_date : null,
+            has_visa: formData.passport.has_visa,
+            visa_type: formData.passport.has_visa ? formData.passport.visa_type : null,
+            visa_expiry_date: formData.passport.has_visa ? formData.passport.visa_expiry_date : null
+          };
+          
+          // Convert passport copy file to base64 if present
+          if (formData.passport.passport_copy_file) {
+            const base64Data = await fileToBase64(formData.passport.passport_copy_file);
+            dataToSave.passport_copy_file = base64Data;
+            dataToSave.passport_copy_file_name = formData.passport.passport_copy_file_name || formData.passport.passport_copy_file.name;
+          }
+          
+          // Convert visa document file to base64 if present
+          if (formData.passport.visa_document_file) {
+            const base64Data = await fileToBase64(formData.passport.visa_document_file);
+            dataToSave.visa_document_file = base64Data;
+            dataToSave.visa_document_file_name = formData.passport.visa_document_file_name || formData.passport.visa_document_file.name;
+          }
+          
+          console.log('📤 Sending passport/visa data:', dataToSave);
+          break;
+        case 'banking':
+          apiEndpoint = '/api/bgv/bank-pf-nps';
+          
+          // Prepare banking data with file conversion
+          dataToSave = {
+            number_of_bank_accounts: formData.banking.number_of_bank_accounts,
+            bank_account_number: formData.banking.bank_account_number,
+            ifsc_code: formData.banking.ifsc_code,
+            name_as_per_bank: formData.banking.name_as_per_bank,
+            bank_name: formData.banking.bank_name,
+            branch: formData.banking.branch,
+            uan_pf_number: formData.banking.uan_pf_number || null,
+            pran_nps_number: formData.banking.pran_nps_number || null
+          };
+          
+          // Convert cancelled cheque file to base64 if present
+          if (formData.banking.cancelled_cheque_file) {
+            const base64Data = await fileToBase64(formData.banking.cancelled_cheque_file);
+            dataToSave.cancelled_cheque_file = base64Data;
+            dataToSave.cancelled_cheque_file_name = formData.banking.cancelled_cheque_file_name || formData.banking.cancelled_cheque_file.name;
+          }
+          
+          console.log('📤 Sending bank/pf/nps data:', dataToSave);
+          break;
+        default:
+          console.log('No API endpoint for section:', section.id);
+          setLoading(false);
+          return;
+      }
+
+      const response = await fetch(`http://localhost:3000${apiEndpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(dataToSave)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to save data');
+      }
+
+      console.log('✅ Section saved successfully:', result);
+      // Show success message briefly
+      const successMessage = document.createElement('div');
+      successMessage.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background-color: #4CAF50;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 4px;
+        z-index: 1000;
+        font-weight: 500;
+      `;
+      successMessage.textContent = `${section.title} saved successfully!`;
+      document.body.appendChild(successMessage);
+      setTimeout(() => {
+        document.body.removeChild(successMessage);
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error saving section:', error);
+      // Show error message
+      const errorMessage = document.createElement('div');
+      errorMessage.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background-color: #f44336;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 4px;
+        z-index: 1000;
+        font-weight: 500;
+      `;
+      errorMessage.textContent = `Failed to save ${sections[activeSection].title}: ${error.message}`;
+      document.body.appendChild(errorMessage);
+      setTimeout(() => {
+        document.body.removeChild(errorMessage);
+      }, 5000);
+    }
+    setLoading(false);
+  };
+
+  const handleNext = async () => {
+    // Validate current section before navigating
+    const section = sections[activeSection];
+    let validationErrors = [];
+    
+    if (section.id === 'personal') {
+      validationErrors = validatePersonalSection();
+    } else if (section.id === 'education') {
+      validationErrors = validateEducationSection();
+    } else if (section.id === 'employment') {
+      validationErrors = validateEmploymentSection();
+    } else if (section.id === 'passport') {
+      validationErrors = validatePassportSection();
+    } else if (section.id === 'banking') {
+      validationErrors = validateBankingSection();
+    }
+    
+    if (validationErrors.length > 0) {
+      alert('Please complete all required fields before proceeding:\n\n' + validationErrors.join('\n'));
+      return;
+    }
+    
+    await handleSave();
+    
+    // If on last section, navigate to review and submit page
+    if (isLastSection) {
+      navigate('/dashboard/review-submit');
+    } else if (activeSection < sections.length - 1) {
+      setActiveSection(activeSection + 1);
+    }
+  };
+
+  const handlePrevious = () => {
+    if (activeSection > 0) {
+      setActiveSection(activeSection - 1);
+      setShowSubmitConfirm(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      console.log('Submitting BGV form:', formData);
+
+      // First, save current section if not saved
+      await handleSave();
+
+      // Submit the entire BGV form
+      const response = await fetch('http://localhost:3000/api/bgv/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          status: 'submitted',
+          completed_sections: sections.map(s => s.id)
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to submit BGV form');
+      }
+
+      console.log('✅ BGV form submitted successfully:', result);
+      
+      // Show success message
+      const successMessage = document.createElement('div');
+      successMessage.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: #4CAF50;
+        color: white;
+        padding: 20px 30px;
+        border-radius: 8px;
+        z-index: 1000;
+        font-weight: 500;
+        font-size: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      `;
+      successMessage.innerHTML = `
+        <div style="text-align: center;">
+          <div style="font-size: 24px; margin-bottom: 8px;">🎉</div>
+          <div>BGV Form Submitted Successfully!</div>
+          <div style="font-size: 14px; margin-top: 8px; opacity: 0.9;">Your submission is now under review</div>
+        </div>
+      `;
+      document.body.appendChild(successMessage);
+      
+      setTimeout(() => {
+        document.body.removeChild(successMessage);
+        // Optionally redirect to a confirmation page
+        // window.location.href = '/bgv-confirmation';
+      }, 4000);
+
+    } catch (error) {
+      console.error('Error submitting BGV form:', error);
+      
+      // Show error message
+      const errorMessage = document.createElement('div');
+      errorMessage.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background-color: #f44336;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 4px;
+        z-index: 1000;
+        font-weight: 500;
+      `;
+      errorMessage.textContent = `Failed to submit BGV form: ${error.message}`;
+      document.body.appendChild(errorMessage);
+      setTimeout(() => {
+        if (document.body.contains(errorMessage)) {
+          document.body.removeChild(errorMessage);
+        }
+      }, 5000);
+    }
+    setLoading(false);
+  };
+
+  const renderSectionContent = () => {
+    const section = sections[activeSection];
+    
+    switch (section.id) {
+      case 'demographics':
+        return (
+          <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+            <h2 style={{ color: '#1f2937', marginBottom: '30px', fontSize: '24px', fontWeight: '600' }}>
+              Demographics – Personal Details
+            </h2>
+
+            {/* Basic Information Section */}
+            <div style={{ marginBottom: '40px' }}>
+              <h3 style={{ color: '#374151', marginBottom: '20px', fontSize: '18px', fontWeight: '500', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px' }}>
+                Basic Information
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                
+                {/* Salutation */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Salutation *
+                  </label>
+                  <select
+                    value={formData.demographics.salutation}
+                    onChange={(e) => handleInputChange('demographics', 'salutation', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.salutation'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="">Select Salutation</option>
+                    <option value="Mr">Mr</option>
+                    <option value="Ms">Ms</option>
+                    <option value="Mrs">Mrs</option>
+                    <option value="Dr">Dr</option>
+                  </select>
+                  {errors['demographics.salutation'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.salutation']}
+                    </span>
+                  )}
+                </div>
+
+                {/* First Name */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    First Name * {prefilledData && <span style={{ color: '#059669', fontSize: '12px' }}>(Auto-filled)</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.demographics.firstName}
+                    onChange={(e) => handleInputChange('demographics', 'firstName', e.target.value)}
+                    placeholder="Enter first name"
+                    readOnly={!!prefilledData?.firstName}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.firstName'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      backgroundColor: prefilledData?.firstName ? '#f9fafb' : 'white',
+                      cursor: prefilledData?.firstName ? 'not-allowed' : 'text'
+                    }}
+                  />
+                  {errors['demographics.firstName'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.firstName']}
+                    </span>
+                  )}
+                </div>
+
+                {/* Middle Name */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Middle Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.demographics.middleName}
+                    onChange={(e) => handleInputChange('demographics', 'middleName', e.target.value)}
+                    placeholder="Enter middle name (optional)"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                {/* Last Name */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Last Name * {prefilledData && <span style={{ color: '#059669', fontSize: '12px' }}>(Auto-filled)</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.demographics.lastName}
+                    onChange={(e) => handleInputChange('demographics', 'lastName', e.target.value)}
+                    placeholder="Enter last name"
+                    readOnly={!!prefilledData?.lastName}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.lastName'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      backgroundColor: prefilledData?.lastName ? '#f9fafb' : 'white',
+                      cursor: prefilledData?.lastName ? 'not-allowed' : 'text'
+                    }}
+                  />
+                  {errors['demographics.lastName'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.lastName']}
+                    </span>
+                  )}
+                </div>
+
+                {/* Name for Records */}
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Name for Records * {prefilledData && <span style={{ color: '#059669', fontSize: '12px' }}>(Auto-filled)</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.demographics.nameForRecords}
+                    onChange={(e) => handleInputChange('demographics', 'nameForRecords', e.target.value)}
+                    placeholder="Enter full official name"
+                    readOnly={!!(prefilledData?.firstName && prefilledData?.lastName)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.nameForRecords'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      backgroundColor: (prefilledData?.firstName && prefilledData?.lastName) ? '#f9fafb' : 'white',
+                      cursor: (prefilledData?.firstName && prefilledData?.lastName) ? 'not-allowed' : 'text'
+                    }}
+                  />
+                  {errors['demographics.nameForRecords'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.nameForRecords']}
+                    </span>
+                  )}
+                </div>
+
+                {/* DOB as per Records */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    DOB as per Records * {prefilledData?.dateOfBirth && <span style={{ color: '#059669', fontSize: '12px' }}>(Auto-filled)</span>}
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.demographics.dobAsPerRecords}
+                    onChange={(e) => handleInputChange('demographics', 'dobAsPerRecords', e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    readOnly={!!prefilledData?.dateOfBirth}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.dobAsPerRecords'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      backgroundColor: prefilledData?.dateOfBirth ? '#f9fafb' : 'white',
+                      cursor: prefilledData?.dateOfBirth ? 'not-allowed' : 'text'
+                    }}
+                  />
+                  {errors['demographics.dobAsPerRecords'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.dobAsPerRecords']}
+                    </span>
+                  )}
+                </div>
+
+                {/* Celebrated DOB */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Celebrated DOB *
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.demographics.celebratedDob}
+                    onChange={(e) => handleInputChange('demographics', 'celebratedDob', e.target.value)}
+                    max={new Date().toISOString().split('T')[0]}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.celebratedDob'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                  {errors['demographics.celebratedDob'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.celebratedDob']}
+                    </span>
+                  )}
+                </div>
+
+                {/* Gender */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Gender * {prefilledData?.gender && <span style={{ color: '#059669', fontSize: '12px' }}>(Auto-filled)</span>}
+                  </label>
+                  <select
+                    value={formData.demographics.gender}
+                    onChange={(e) => handleInputChange('demographics', 'gender', e.target.value)}
+                    disabled={!!prefilledData?.gender}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.gender'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      backgroundColor: prefilledData?.gender ? '#f9fafb' : 'white',
+                      cursor: prefilledData?.gender ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                  {errors['demographics.gender'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.gender']}
+                    </span>
+                  )}
+                </div>
+
+                {/* Blood Group */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Blood Group *
+                  </label>
+                  <select
+                    value={formData.demographics.bloodGroup}
+                    onChange={(e) => handleInputChange('demographics', 'bloodGroup', e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.bloodGroup'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="">Select Blood Group</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                  </select>
+                  {errors['demographics.bloodGroup'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.bloodGroup']}
+                    </span>
+                  )}
+                </div>
+
+                {/* WhatsApp Number */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    WhatsApp Number * {prefilledData?.phoneNumber && <span style={{ color: '#059669', fontSize: '12px' }}>(Auto-filled)</span>}
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.demographics.whatsappNumber}
+                    onChange={(e) => handleInputChange('demographics', 'whatsappNumber', e.target.value)}
+                    placeholder="+91 1234567890"
+                    readOnly={!!(prefilledData?.phoneNumber && prefilledData.phoneNumber !== null && prefilledData.phoneNumber !== '')}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.whatsappNumber'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      backgroundColor: (prefilledData?.phoneNumber && prefilledData.phoneNumber !== null && prefilledData.phoneNumber !== '') ? '#f9fafb' : 'white',
+                      cursor: (prefilledData?.phoneNumber && prefilledData.phoneNumber !== null && prefilledData.phoneNumber !== '') ? 'not-allowed' : 'text'
+                    }}
+                  />
+                  {errors['demographics.whatsappNumber'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.whatsappNumber']}
+                    </span>
+                  )}
+                </div>
+
+                {/* LinkedIn URL */}
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    LinkedIn URL
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.demographics.linkedinUrl}
+                    onChange={(e) => handleInputChange('demographics', 'linkedinUrl', e.target.value)}
+                    placeholder="https://www.linkedin.com/in/yourprofile"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: `1px solid ${errors['demographics.linkedinUrl'] ? '#ef4444' : '#d1d5db'}`,
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                  {errors['demographics.linkedinUrl'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.linkedinUrl']}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Identity & Documents Section */}
+            <div style={{ marginBottom: '40px' }}>
+              <h3 style={{ color: '#374151', marginBottom: '20px', fontSize: '18px', fontWeight: '500', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px' }}>
+                Identity & Documents
+              </h3>
+
+              {/* Aadhaar Details */}
+              <div style={{ marginBottom: '30px' }}>
+                <h4 style={{ color: '#6b7280', marginBottom: '15px', fontSize: '16px', fontWeight: '500' }}>
+                  Aadhaar Details
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Aadhaar Card Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.demographics.aadhaarNumber}
+                      onChange={(e) => handleInputChange('demographics', 'aadhaarNumber', e.target.value)}
+                      placeholder="1234 5678 9012"
+                      maxLength="14"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: `1px solid ${errors['demographics.aadhaarNumber'] ? '#ef4444' : '#d1d5db'}`,
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                    {errors['demographics.aadhaarNumber'] && (
+                      <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        {errors['demographics.aadhaarNumber']}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Aadhaar File *
+                    </label>
+                    {formData.demographics.aadhaarFile && formData.demographics.aadhaarFile.uploaded ? (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        backgroundColor: '#f9fafb'
+                      }}>
+                        <span style={{ flex: 1, fontSize: '14px', color: '#374151' }}>
+                          📄 {formData.demographics.aadhaarFile.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleFileUpload('aadhaarFile', null)}
+                          style={{
+                            marginLeft: '10px',
+                            padding: '4px 8px',
+                            fontSize: '12px',
+                            color: '#3b82f6',
+                            backgroundColor: 'transparent',
+                            border: '1px solid #3b82f6',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => handleFileUpload('aadhaarFile', e.target.files?.[0] || null)}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: `1px solid ${errors['demographics.aadhaarFile'] ? '#ef4444' : '#d1d5db'}`,
+                          borderRadius: '8px',
+                          fontSize: '14px'
+                        }}
+                      />
+                    )}
+                    {formData.demographics.aadhaarFile && !formData.demographics.aadhaarFile.uploaded && (
+                      <span style={{ color: '#059669', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        ✓ {formData.demographics.aadhaarFile.name}
+                      </span>
+                    )}
+                    {errors['demographics.aadhaarFile'] && (
+                      <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        {errors['demographics.aadhaarFile']}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* PAN Details */}
+              <div style={{ marginBottom: '30px' }}>
+                <h4 style={{ color: '#6b7280', marginBottom: '15px', fontSize: '16px', fontWeight: '500' }}>
+                  PAN Details
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      PAN Card Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.demographics.panNumber}
+                      onChange={(e) => handleInputChange('demographics', 'panNumber', e.target.value.toUpperCase())}
+                      placeholder="ABCDE1234F"
+                      maxLength="10"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: `1px solid ${errors['demographics.panNumber'] ? '#ef4444' : '#d1d5db'}`,
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        textTransform: 'uppercase'
+                      }}
+                    />
+                    {errors['demographics.panNumber'] && (
+                      <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        {errors['demographics.panNumber']}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      PAN File *
+                    </label>
+                    {formData.demographics.panFile && formData.demographics.panFile.uploaded ? (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        backgroundColor: '#f9fafb'
+                      }}>
+                        <span style={{ flex: 1, fontSize: '14px', color: '#374151' }}>
+                          📄 {formData.demographics.panFile.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleFileUpload('panFile', null)}
+                          style={{
+                            marginLeft: '10px',
+                            padding: '4px 8px',
+                            fontSize: '12px',
+                            color: '#3b82f6',
+                            backgroundColor: 'transparent',
+                            border: '1px solid #3b82f6',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => handleFileUpload('panFile', e.target.files?.[0] || null)}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: `1px solid ${errors['demographics.panFile'] ? '#ef4444' : '#d1d5db'}`,
+                          borderRadius: '8px',
+                          fontSize: '14px'
+                        }}
+                      />
+                    )}
+                    {formData.demographics.panFile && !formData.demographics.panFile.uploaded && (
+                      <span style={{ color: '#059669', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        ✓ {formData.demographics.panFile.name}
+                      </span>
+                    )}
+                    {errors['demographics.panFile'] && (
+                      <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                        {errors['demographics.panFile']}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Resume */}
+              <div style={{ marginBottom: '30px' }}>
+                <h4 style={{ color: '#6b7280', marginBottom: '15px', fontSize: '16px', fontWeight: '500' }}>
+                  Resume
+                </h4>
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Resume File *
+                  </label>
+                  {formData.demographics.resumeFile && formData.demographics.resumeFile.uploaded ? (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      backgroundColor: '#f9fafb',
+                      maxWidth: '400px'
+                    }}>
+                      <span style={{ flex: 1, fontSize: '14px', color: '#374151' }}>
+                        📄 {formData.demographics.resumeFile.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleFileUpload('resumeFile', null)}
+                        style={{
+                          marginLeft: '10px',
+                          padding: '4px 8px',
+                          fontSize: '12px',
+                          color: '#3b82f6',
+                          backgroundColor: 'transparent',
+                          border: '1px solid #3b82f6',
+                          borderRadius: '4px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={(e) => handleFileUpload('resumeFile', e.target.files?.[0] || null)}
+                      style={{
+                        width: '100%',
+                        maxWidth: '400px',
+                        padding: '10px',
+                        border: `1px solid ${errors['demographics.resumeFile'] ? '#ef4444' : '#d1d5db'}`,
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  )}
+                  <p style={{ color: '#6b7280', fontSize: '12px', marginTop: '4px' }}>
+                    Max file size: 10MB. Allowed formats: PDF, JPG, JPEG, PNG
+                  </p>
+                  {formData.demographics.resumeFile && !formData.demographics.resumeFile.uploaded && (
+                    <span style={{ color: '#059669', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      ✓ {formData.demographics.resumeFile.name}
+                    </span>
+                  )}
+                  {errors['demographics.resumeFile'] && (
+                    <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                      {errors['demographics.resumeFile']}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Address Section */}
+            <div style={{ marginBottom: '40px' }}>
+              <h3 style={{ color: '#374151', marginBottom: '20px', fontSize: '18px', fontWeight: '500', borderBottom: '2px solid #e5e7eb', paddingBottom: '8px' }}>
+                Address Information
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
+                {/* Communication Address */}
+                <div>
+                  <h4 style={{ color: '#6b7280', marginBottom: '15px', fontSize: '16px', fontWeight: '500' }}>
+                    Communication Address
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        H.No / Flat No *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.communicationAddress.houseNo}
+                        onChange={(e) => handleAddressChange('communicationAddress', 'houseNo', e.target.value)}
+                        placeholder="Enter house/flat number"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        Street Name & Landmark *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.communicationAddress.streetName}
+                        onChange={(e) => handleAddressChange('communicationAddress', 'streetName', e.target.value)}
+                        placeholder="Enter street name & landmark"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        City / Town / Village *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.communicationAddress.city}
+                        onChange={(e) => handleAddressChange('communicationAddress', 'city', e.target.value)}
+                        placeholder="Enter city/town/village"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        District *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.communicationAddress.district}
+                        onChange={(e) => handleAddressChange('communicationAddress', 'district', e.target.value)}
+                        placeholder="Enter district"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        State *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.communicationAddress.state}
+                        onChange={(e) => handleAddressChange('communicationAddress', 'state', e.target.value)}
+                        placeholder="Enter state"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Permanent Address */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '15px', gap: '10px' }}>
+                    <input
+                      type="checkbox"
+                      id="sameAddress"
+                      checked={formData.demographics.sameAsCommAddress}
+                      onChange={(e) => handleSameAddressChange(e.target.checked)}
+                      style={{ width: '16px', height: '16px' }}
+                    />
+                    <label htmlFor="sameAddress" style={{ color: '#374151', fontSize: '14px', fontWeight: '500' }}>
+                      Check if permanent address is same as communication address
+                    </label>
+                  </div>
+
+                  <h4 style={{ color: '#6b7280', marginBottom: '15px', fontSize: '16px', fontWeight: '500' }}>
+                    Permanent Address
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        H.No / Flat No *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.permanentAddress.houseNo}
+                        onChange={(e) => handleAddressChange('permanentAddress', 'houseNo', e.target.value)}
+                        disabled={formData.demographics.sameAsCommAddress}
+                        placeholder="Enter house/flat number"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          backgroundColor: formData.demographics.sameAsCommAddress ? '#f9fafb' : 'white'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        Street Name & Landmark *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.permanentAddress.streetName}
+                        onChange={(e) => handleAddressChange('permanentAddress', 'streetName', e.target.value)}
+                        disabled={formData.demographics.sameAsCommAddress}
+                        placeholder="Enter street name & landmark"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          backgroundColor: formData.demographics.sameAsCommAddress ? '#f9fafb' : 'white'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        City / Town / Village *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.permanentAddress.city}
+                        onChange={(e) => handleAddressChange('permanentAddress', 'city', e.target.value)}
+                        disabled={formData.demographics.sameAsCommAddress}
+                        placeholder="Enter city/town/village"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          backgroundColor: formData.demographics.sameAsCommAddress ? '#f9fafb' : 'white'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        District *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.permanentAddress.district}
+                        onChange={(e) => handleAddressChange('permanentAddress', 'district', e.target.value)}
+                        disabled={formData.demographics.sameAsCommAddress}
+                        placeholder="Enter district"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          backgroundColor: formData.demographics.sameAsCommAddress ? '#f9fafb' : 'white'
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                        State *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.demographics.permanentAddress.state}
+                        onChange={(e) => handleAddressChange('permanentAddress', 'state', e.target.value)}
+                        disabled={formData.demographics.sameAsCommAddress}
+                        placeholder="Enter state"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          backgroundColor: formData.demographics.sameAsCommAddress ? '#f9fafb' : 'white'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'personal':
+        return (
+          <div style={{ padding: '20px' }}>
+            <h3 style={{ color: 'black', marginBottom: '20px', fontSize: '20px' }}>Personal Information</h3>
+            <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '20px' }}>
+              Complete your personal details and emergency contact information.
+            </p>
+
+            {/* Personal Information Section */}
+            <div style={{ marginBottom: '30px' }}>
+              <h4 style={{ color: 'black', marginBottom: '15px', fontSize: '16px', fontWeight: '600' }}>Personal Details</h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                {/* Marital Status */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', color: '#374151', fontSize: '14px', fontWeight: '500' }}>
+                    Marital Status <span style={{ color: 'red' }}>*</span>
+                  </label>
+                  <select
+                    value={formData.personal.maritalStatus}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFormData(prev => ({
+                        ...prev,
+                        personal: {
+                          ...prev.personal,
+                          maritalStatus: value,
+                          noOfChildren: value !== 'Married' ? '' : prev.personal.noOfChildren
+                        }
+                      }));
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="">Select Marital Status</option>
+                    <option value="Single">Single</option>
+                    <option value="Married">Married</option>
+                    <option value="Divorced">Divorced</option>
+                    <option value="Widowed">Widowed</option>
+                  </select>
+                </div>
+
+                {/* Number of Children */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', color: '#374151', fontSize: '14px', fontWeight: '500' }}>
+                    Number of Children
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    disabled={formData.personal.maritalStatus !== 'Married'}
+                    value={formData.personal.noOfChildren}
+                    onChange={(e) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        personal: { ...prev.personal, noOfChildren: e.target.value }
+                      }));
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      backgroundColor: formData.personal.maritalStatus !== 'Married' ? '#f3f4f6' : 'white'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Father Details */}
+            <div style={{ marginBottom: '30px' }}>
+              <h4 style={{ color: 'black', marginBottom: '15px', fontSize: '16px', fontWeight: '600' }}>Father's Details</h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px', gap: '15px', alignItems: 'end' }}>
+                {/* Father Name */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', color: '#374151', fontSize: '14px', fontWeight: '500' }}>
+                    Father's Name <span style={{ color: 'red' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.personal.fatherName}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                      setFormData(prev => ({
+                        ...prev,
+                        personal: { ...prev.personal, fatherName: value }
+                      }));
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                {/* Father DOB */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', color: '#374151', fontSize: '14px', fontWeight: '500' }}>
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().split('T')[0]}
+                    disabled={formData.personal.fatherDeceased}
+                    value={formData.personal.fatherDob}
+                    onChange={(e) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        personal: { ...prev.personal, fatherDob: e.target.value }
+                      }));
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      backgroundColor: formData.personal.fatherDeceased ? '#f3f4f6' : 'white'
+                    }}
+                  />
+                </div>
+
+                {/* Father Deceased */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '10px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.personal.fatherDeceased}
+                    onChange={(e) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        personal: { 
+                          ...prev.personal, 
+                          fatherDeceased: e.target.checked,
+                          fatherDob: e.target.checked ? '' : prev.personal.fatherDob
+                        }
+                      }));
+                    }}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  <label style={{ fontSize: '14px', color: '#374151' }}>Deceased</label>
+                </div>
+              </div>
+            </div>
+
+            {/* Mother Details */}
+            <div style={{ marginBottom: '30px' }}>
+              <h4 style={{ color: 'black', marginBottom: '15px', fontSize: '16px', fontWeight: '600' }}>Mother's Details</h4>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 100px', gap: '15px', alignItems: 'end' }}>
+                {/* Mother Name */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', color: '#374151', fontSize: '14px', fontWeight: '500' }}>
+                    Mother's Name <span style={{ color: 'red' }}>*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.personal.motherName}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                      setFormData(prev => ({
+                        ...prev,
+                        personal: { ...prev.personal, motherName: value }
+                      }));
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                {/* Mother DOB */}
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', color: '#374151', fontSize: '14px', fontWeight: '500' }}>
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().split('T')[0]}
+                    disabled={formData.personal.motherDeceased}
+                    value={formData.personal.motherDob}
+                    onChange={(e) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        personal: { ...prev.personal, motherDob: e.target.value }
+                      }));
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      backgroundColor: formData.personal.motherDeceased ? '#f3f4f6' : 'white'
+                    }}
+                  />
+                </div>
+
+                {/* Mother Deceased */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '10px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.personal.motherDeceased}
+                    onChange={(e) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        personal: { 
+                          ...prev.personal, 
+                          motherDeceased: e.target.checked,
+                          motherDob: e.target.checked ? '' : prev.personal.motherDob
+                        }
+                      }));
+                    }}
+                    style={{ width: '16px', height: '16px' }}
+                  />
+                  <label style={{ fontSize: '14px', color: '#374151' }}>Deceased</label>
+                </div>
+              </div>
+            </div>
+
+            {/* Emergency Contacts Section */}
+            <div style={{ marginBottom: '30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h4 style={{ color: 'black', fontSize: '16px', fontWeight: '600' }}>Emergency Contacts</h4>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      personal: {
+                        ...prev.personal,
+                        emergencyContacts: [
+                          ...prev.personal.emergencyContacts,
+                          { name: '', mobile: '', relationship: '' }
+                        ]
+                      }
+                    }));
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#4f46e5',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  + Add Contact
+                </button>
+              </div>
+
+              {/* Emergency Contacts Table */}
+              <div style={{ border: '1px solid #d1d5db', borderRadius: '4px', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f3f4f6' }}>
+                      <th style={{ padding: '12px', textAlign: 'left', color: '#374151', fontSize: '14px', fontWeight: '600' }}>
+                        Contact Person Name <span style={{ color: 'red' }}>*</span>
+                      </th>
+                      <th style={{ padding: '12px', textAlign: 'left', color: '#374151', fontSize: '14px', fontWeight: '600' }}>
+                        Mobile Number <span style={{ color: 'red' }}>*</span>
+                      </th>
+                      <th style={{ padding: '12px', textAlign: 'left', color: '#374151', fontSize: '14px', fontWeight: '600' }}>
+                        Relationship <span style={{ color: 'red' }}>*</span>
+                      </th>
+                      <th style={{ padding: '12px', textAlign: 'center', color: '#374151', fontSize: '14px', fontWeight: '600', width: '80px' }}>
+                        Action
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formData.personal.emergencyContacts.map((contact, index) => (
+                      <tr key={index} style={{ borderTop: '1px solid #e5e7eb' }}>
+                        <td style={{ padding: '12px' }}>
+                          <input
+                            type="text"
+                            value={contact.name}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                              const newContacts = [...formData.personal.emergencyContacts];
+                              newContacts[index].name = value;
+                              setFormData(prev => ({
+                                ...prev,
+                                personal: { ...prev.personal, emergencyContacts: newContacts }
+                              }));
+                            }}
+                            placeholder="Enter name"
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '4px',
+                              fontSize: '14px'
+                            }}
+                          />
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          <input
+                            type="text"
+                            value={contact.mobile}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 15);
+                              const newContacts = [...formData.personal.emergencyContacts];
+                              newContacts[index].mobile = value;
+                              setFormData(prev => ({
+                                ...prev,
+                                personal: { ...prev.personal, emergencyContacts: newContacts }
+                              }));
+                            }}
+                            placeholder="10-15 digits"
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '4px',
+                              fontSize: '14px'
+                            }}
+                          />
+                          {contact.mobile && (contact.mobile.length < 10 || contact.mobile.length > 15) && (
+                            <span style={{ color: 'red', fontSize: '12px' }}>Must be 10-15 digits</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          <select
+                            value={contact.relationship}
+                            onChange={(e) => {
+                              const newContacts = [...formData.personal.emergencyContacts];
+                              newContacts[index].relationship = e.target.value;
+                              setFormData(prev => ({
+                                ...prev,
+                                personal: { ...prev.personal, emergencyContacts: newContacts }
+                              }));
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              border: '1px solid #d1d5db',
+                              borderRadius: '4px',
+                              fontSize: '14px'
+                            }}
+                          >
+                            <option value="">Select</option>
+                            <option value="Father">Father</option>
+                            <option value="Mother">Mother</option>
+                            <option value="Spouse">Spouse</option>
+                            <option value="Sibling">Sibling</option>
+                            <option value="Relative">Relative</option>
+                            <option value="Friend">Friend</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'center' }}>
+                          {formData.personal.emergencyContacts.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newContacts = formData.personal.emergencyContacts.filter((_, i) => i !== index);
+                                setFormData(prev => ({
+                                  ...prev,
+                                  personal: { ...prev.personal, emergencyContacts: newContacts }
+                                }));
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                backgroundColor: '#ef4444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 'education':
+        return (
+          <div style={{ padding: '20px' }}>
+            <h3 style={{ color: 'black', marginBottom: '20px', fontSize: '20px' }}>Educational Background</h3>
+            
+            {/* Educational Qualifications Section */}
+            <div style={{ marginBottom: '40px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h4 style={{ color: '#1f2937', fontSize: '16px', fontWeight: '600' }}>
+                  Educational Qualifications <span style={{ color: '#ef4444' }}>*</span>
+                </h4>
+                <button
+                  onClick={handleAddEducation}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '8px 16px',
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  <span>+ Add More</span>
+                </button>
+              </div>
+
+              {/* Educational Qualifications Table */}
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Qualification <span style={{ color: '#ef4444' }}>*</span></th>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>University/Institution <span style={{ color: '#ef4444' }}>*</span></th>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>CGPA/% <span style={{ color: '#ef4444' }}>*</span></th>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Year of Passing <span style={{ color: '#ef4444' }}>*</span></th>
+                      <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Documents <span style={{ color: '#ef4444' }}>*</span></th>
+                      <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formData.education.qualifications && formData.education.qualifications.map((qual, index) => (
+                        <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                          <td style={{ padding: '12px' }}>
+                            <select
+                              value={qual.qualification}
+                              onChange={(e) => handleEducationChange(index, 'qualification', e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '14px'
+                              }}
+                            >
+                              <option value="">Select</option>
+                              <option value="10th">10th</option>
+                              <option value="12th">12th</option>
+                              <option value="Diploma">Diploma</option>
+                              <option value="Bachelor of Technology">Bachelor of Technology</option>
+                              <option value="Bachelor of Science">Bachelor of Science</option>
+                              <option value="Bachelor of Arts">Bachelor of Arts</option>
+                              <option value="Bachelor of Commerce">Bachelor of Commerce</option>
+                              <option value="Master of Technology">Master of Technology</option>
+                              <option value="Master of Science">Master of Science</option>
+                              <option value="Master of Arts">Master of Arts</option>
+                              <option value="Master of Commerce">Master of Commerce</option>
+                              <option value="Master of Business Administration">Master of Business Administration</option>
+                              <option value="PhD">PhD</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <input
+                              type="text"
+                              value={qual.university_institution}
+                              onChange={(e) => handleEducationChange(index, 'university_institution', e.target.value)}
+                              placeholder="Enter university/institution"
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '14px'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <input
+                              type="text"
+                              value={qual.cgpa_percentage}
+                              onChange={(e) => handleEducationChange(index, 'cgpa_percentage', e.target.value)}
+                              placeholder="e.g., 8.2, 82%"
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '14px'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <input
+                              type="number"
+                              value={qual.year_of_passing}
+                              onChange={(e) => handleEducationChange(index, 'year_of_passing', e.target.value)}
+                              placeholder="YYYY"
+                              min="1950"
+                              max={new Date().getFullYear()}
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '14px'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={(e) => handleEducationFileUpload(index, e.target.files)}
+                              style={{ fontSize: '12px' }}
+                            />
+                            {qual.documentName && (
+                              <div style={{ fontSize: '12px', color: '#10b981', marginTop: '4px' }}>
+                                ✓ {qual.documentName}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            {formData.education.qualifications.length > 1 && (
+                              <button
+                                onClick={() => handleRemoveEducation(index)}
+                                style={{
+                                  padding: '6px 12px',
+                                  backgroundColor: '#ef4444',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+            </div>
+
+            {/* Additional Qualifications Section */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h4 style={{ color: '#1f2937', fontSize: '16px', fontWeight: '600' }}>
+                  Additional Qualifications / Certificates (Optional)
+                </h4>
+                <button
+                  onClick={handleAddAdditionalQualification}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '8px 16px',
+                    backgroundColor: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  <span>Add +</span>
+                </button>
+              </div>
+
+              {formData.education.additionalQualifications && formData.education.additionalQualifications.length > 0 ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f0f9ff', borderBottom: '2px solid #bfdbfe' }}>
+                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Name of Qualification/Certificate</th>
+                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Documents</th>
+                        <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {formData.education.additionalQualifications.map((cert, index) => (
+                        <tr key={index} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                          <td style={{ padding: '12px' }}>
+                            <input
+                              type="text"
+                              value={cert.certificate_name}
+                              onChange={(e) => handleAdditionalQualificationChange(index, 'certificate_name', e.target.value)}
+                              placeholder="Enter certificate name"
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '6px',
+                                fontSize: '14px'
+                              }}
+                            />
+                          </td>
+                          <td style={{ padding: '12px' }}>
+                            <input
+                              type="file"
+                              accept=".pdf,.jpg,.jpeg,.png"
+                              onChange={(e) => handleAdditionalQualificationFileUpload(index, e.target.files)}
+                              style={{ fontSize: '12px' }}
+                            />
+                            {cert.documentName && (
+                              <div style={{ fontSize: '12px', color: '#10b981', marginTop: '4px' }}>
+                                ✓ {cert.documentName}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center' }}>
+                            <button
+                              onClick={() => handleRemoveAdditionalQualification(index)}
+                              style={{
+                                padding: '6px 12px',
+                                backgroundColor: '#ef4444',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ 
+                  padding: '30px', 
+                  textAlign: 'center', 
+                  backgroundColor: '#f0f9ff', 
+                  borderRadius: '8px',
+                  border: '2px dashed #bfdbfe'
+                }}>
+                  <p style={{ color: '#6b7280', fontSize: '14px' }}>No additional qualifications added</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'employment':
+        return (
+          <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+            <h2 style={{ color: '#1f2937', marginBottom: '30px', fontSize: '24px', fontWeight: '600' }}>
+              Employment History
+            </h2>
+
+            {formData.employment.employmentHistory.map((emp, index) => (
+              <div key={index} style={{ 
+                marginBottom: '30px', 
+                padding: '20px', 
+                backgroundColor: '#f9fafb', 
+                borderRadius: '12px',
+                border: '1px solid #e5e7eb'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <h3 style={{ color: '#374151', fontSize: '16px', fontWeight: '600' }}>
+                    Employment Record #{index + 1}
+                  </h3>
+                  {formData.employment.employmentHistory.length > 1 && (
+                    <button
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          employment: {
+                            ...prev.employment,
+                            employmentHistory: prev.employment.employmentHistory.filter((_, i) => i !== index)
+                          }
+                        }));
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        backgroundColor: '#ef4444',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '500'
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Company Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={emp.company_name}
+                      onChange={(e) => {
+                        const newHistory = [...formData.employment.employmentHistory];
+                        newHistory[index].company_name = e.target.value;
+                        setFormData(prev => ({ ...prev, employment: { ...prev.employment, employmentHistory: newHistory } }));
+                      }}
+                      placeholder="Enter company name"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Designation *
+                    </label>
+                    <input
+                      type="text"
+                      value={emp.designation}
+                      onChange={(e) => {
+                        const newHistory = [...formData.employment.employmentHistory];
+                        newHistory[index].designation = e.target.value;
+                        setFormData(prev => ({ ...prev, employment: { ...prev.employment, employmentHistory: newHistory } }));
+                      }}
+                      placeholder="Enter your designation"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Start Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={emp.employment_start_date}
+                      onChange={(e) => {
+                        const newHistory = [...formData.employment.employmentHistory];
+                        newHistory[index].employment_start_date = e.target.value;
+                        setFormData(prev => ({ ...prev, employment: { ...prev.employment, employmentHistory: newHistory } }));
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      End Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={emp.employment_end_date}
+                      onChange={(e) => {
+                        const newHistory = [...formData.employment.employmentHistory];
+                        newHistory[index].employment_end_date = e.target.value;
+                        setFormData(prev => ({ ...prev, employment: { ...prev.employment, employmentHistory: newHistory } }));
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Reason for Leaving
+                    </label>
+                    <textarea
+                      value={emp.reason_for_leaving}
+                      onChange={(e) => {
+                        const newHistory = [...formData.employment.employmentHistory];
+                        newHistory[index].reason_for_leaving = e.target.value;
+                        setFormData(prev => ({ ...prev, employment: { ...prev.employment, employmentHistory: newHistory } }));
+                      }}
+                      placeholder="Enter reason for leaving"
+                      rows={2}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        resize: 'vertical'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Offer Letter
+                    </label>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={async (e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          await handleEmploymentFileUpload(index, 'offer_letter_url', e.target.files[0]);
+                        }
+                      }}
+                      style={{ fontSize: '12px' }}
+                    />
+                    {emp.offer_letter_file_name && (
+                      <div style={{ fontSize: '12px', color: '#10b981', marginTop: '4px' }}>
+                        ✓ {emp.offer_letter_file_name}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Experience Letter
+                    </label>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={async (e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          await handleEmploymentFileUpload(index, 'experience_letter_url', e.target.files[0]);
+                        }
+                      }}
+                      style={{ fontSize: '12px' }}
+                    />
+                    {emp.experience_letter_file_name && (
+                      <div style={{ fontSize: '12px', color: '#10b981', marginTop: '4px' }}>
+                        ✓ {emp.experience_letter_file_name}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Payslips
+                    </label>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={async (e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          await handleEmploymentFileUpload(index, 'payslips_url', e.target.files[0]);
+                        }
+                      }}
+                      style={{ fontSize: '12px' }}
+                    />
+                    {emp.payslips_file_name && (
+                      <div style={{ fontSize: '12px', color: '#10b981', marginTop: '4px' }}>
+                        ✓ {emp.payslips_file_name}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <button
+              onClick={() => {
+                setFormData(prev => ({
+                  ...prev,
+                  employment: {
+                    ...prev.employment,
+                    employmentHistory: [
+                      ...prev.employment.employmentHistory,
+                      {
+                        company_name: '',
+                        designation: '',
+                        employment_start_date: '',
+                        employment_end_date: '',
+                        reason_for_leaving: '',
+                        offer_letter_url: '',
+                        experience_letter_url: '',
+                        payslips_url: ''
+                      }
+                    ]
+                  }
+                }));
+              }}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <span>+ Add Another Employment</span>
+            </button>
+          </div>
+        );
+
+      case 'passport':
+        return (
+          <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+            <h2 style={{ color: '#1f2937', marginBottom: '30px', fontSize: '24px', fontWeight: '600' }}>
+              Passport & Visa Information
+            </h2>
+
+            {/* Passport Section */}
+            <div style={{ marginBottom: '40px', padding: '20px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+              <h3 style={{ color: '#374151', marginBottom: '20px', fontSize: '18px', fontWeight: '500' }}>
+                Passport Details
+              </h3>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.passport.has_passport}
+                    onChange={(e) => handleInputChange('passport', 'has_passport', e.target.checked)}
+                    style={{ marginRight: '8px', width: '16px', height: '16px' }}
+                  />
+                  <span style={{ color: '#374151', fontSize: '14px', fontWeight: '500' }}>I have a passport</span>
+                </label>
+              </div>
+
+              {formData.passport.has_passport && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Passport Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.passport.passport_number}
+                      onChange={(e) => handleInputChange('passport', 'passport_number', e.target.value)}
+                      placeholder="Enter passport number"
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Issue Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.passport.passport_issue_date}
+                      onChange={(e) => handleInputChange('passport', 'passport_issue_date', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Expiry Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.passport.passport_expiry_date}
+                      onChange={(e) => handleInputChange('passport', 'passport_expiry_date', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Passport Copy
+                    </label>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={async (e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          await handlePassportFileUpload('passport_copy_url', e.target.files[0]);
+                        }
+                      }}
+                      style={{ fontSize: '12px' }}
+                    />
+                    {formData.passport.passport_copy_file_name && (
+                      <div style={{ fontSize: '12px', color: '#10b981', marginTop: '4px' }}>
+                        ✓ {formData.passport.passport_copy_file_name}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Visa Section */}
+            <div style={{ padding: '20px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+              <h3 style={{ color: '#374151', marginBottom: '20px', fontSize: '18px', fontWeight: '500' }}>
+                Visa Details
+              </h3>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.passport.has_visa}
+                    onChange={(e) => handleInputChange('passport', 'has_visa', e.target.checked)}
+                    style={{ marginRight: '8px', width: '16px', height: '16px' }}
+                  />
+                  <span style={{ color: '#374151', fontSize: '14px', fontWeight: '500' }}>I have a visa</span>
+                </label>
+              </div>
+
+              {formData.passport.has_visa && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Visa Type *
+                    </label>
+                    <select
+                      value={formData.passport.visa_type}
+                      onChange={(e) => handleInputChange('passport', 'visa_type', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    >
+                      <option value="">Select Visa Type</option>
+                      <option value="Work Visa">Work Visa</option>
+                      <option value="Student Visa">Student Visa</option>
+                      <option value="Tourist Visa">Tourist Visa</option>
+                      <option value="Business Visa">Business Visa</option>
+                      <option value="H1B">H1B</option>
+                      <option value="L1">L1</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Visa Expiry Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.passport.visa_expiry_date}
+                      onChange={(e) => handleInputChange('passport', 'visa_expiry_date', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '14px'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                      Visa Document
+                    </label>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      onChange={async (e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          await handlePassportFileUpload('visa_document_url', e.target.files[0]);
+                        }
+                      }}
+                      style={{ fontSize: '12px' }}
+                    />
+                    {formData.passport.visa_document_file_name && (
+                      <div style={{ fontSize: '12px', color: '#10b981', marginTop: '4px' }}>
+                        ✓ {formData.passport.visa_document_file_name}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'banking':
+        return (
+          <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+            <h2 style={{ color: '#1f2937', marginBottom: '30px', fontSize: '24px', fontWeight: '600' }}>
+              Bank, PF & NPS Information
+            </h2>
+
+            {/* Bank Details Section */}
+            <div style={{ marginBottom: '40px', padding: '20px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+              <h3 style={{ color: '#374151', marginBottom: '20px', fontSize: '18px', fontWeight: '500' }}>
+                Bank Account Details
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Number of Bank Accounts
+                  </label>
+                  <select
+                    value={formData.banking.number_of_bank_accounts}
+                    onChange={(e) => handleInputChange('banking', 'number_of_bank_accounts', parseInt(e.target.value))}
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="4">4</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Bank Account Number *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.banking.bank_account_number}
+                    onChange={(e) => handleInputChange('banking', 'bank_account_number', e.target.value)}
+                    placeholder="Enter account number"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    IFSC Code *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.banking.ifsc_code}
+                    onChange={(e) => handleInputChange('banking', 'ifsc_code', e.target.value.toUpperCase())}
+                    placeholder="Enter IFSC code"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Name as per Bank *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.banking.name_as_per_bank}
+                    onChange={(e) => handleInputChange('banking', 'name_as_per_bank', e.target.value)}
+                    placeholder="Enter name as per bank records"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Bank Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.banking.bank_name}
+                    onChange={(e) => handleInputChange('banking', 'bank_name', e.target.value)}
+                    placeholder="Enter bank name"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Branch *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.banking.branch}
+                    onChange={(e) => handleInputChange('banking', 'branch', e.target.value)}
+                    placeholder="Enter branch name"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    Cancelled Cheque
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={async (e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        await handleBankingFileUpload('cancelled_cheque_url', e.target.files[0]);
+                      }
+                    }}
+                    style={{ fontSize: '12px' }}
+                  />
+                  {formData.banking.cancelled_cheque_file_name && (
+                    <div style={{ fontSize: '12px', color: '#10b981', marginTop: '4px' }}>
+                      ✓ {formData.banking.cancelled_cheque_file_name}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* PF & NPS Section */}
+            <div style={{ padding: '20px', backgroundColor: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb' }}>
+              <h3 style={{ color: '#374151', marginBottom: '20px', fontSize: '18px', fontWeight: '500' }}>
+                PF & NPS Details
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    UAN / PF Number
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.banking.uan_pf_number}
+                    onChange={(e) => handleInputChange('banking', 'uan_pf_number', e.target.value)}
+                    placeholder="Enter UAN or PF number"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                  <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                    Universal Account Number for Provident Fund
+                  </p>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', color: '#374151', fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+                    PRAN / NPS Number
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.banking.pran_nps_number}
+                    onChange={(e) => handleInputChange('banking', 'pran_nps_number', e.target.value)}
+                    placeholder="Enter PRAN or NPS number"
+                    style={{
+                      width: '100%',
+                      padding: '10px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '8px',
+                      fontSize: '14px'
+                    }}
+                  />
+                  <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                    Permanent Retirement Account Number for NPS
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      default:
+        return <div>Section not implemented</div>;
+    }
+  };
+
+  const isLastSection = activeSection === sections.length - 1;
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+
+  return (
+    <div style={{ padding: '20px', backgroundColor: 'white', minHeight: '500px' }}>
+      <h1 style={{ color: 'black', fontSize: '28px', marginBottom: '20px', fontWeight: 'bold' }}>
+        📄 Document Submission (BGV)
+      </h1>
+      
+      <p style={{ color: '#6b7280', fontSize: '16px', marginBottom: '30px' }}>
+        Complete your background verification by submitting all required documents and information.
+      </p>
+
+      {/* Section Navigation */}
+      <div style={{ 
+        display: 'flex', 
+        overflowX: 'auto', 
+        marginBottom: '30px',
+        padding: '10px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '12px',
+        gap: '8px'
+      }}>
+        {sections.map((section, index) => (
+          <div
+            key={section.id}
+            onClick={() => handleSectionChange(index)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              backgroundColor: activeSection === index ? '#3b82f6' : 'transparent',
+              color: activeSection === index ? 'white' : '#6b7280',
+              transition: 'all 0.2s ease',
+              minWidth: '150px',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}
+          >
+            <section.icon />
+            <span>{section.title}</span>
+            {section.completed && (
+              <FiCheck style={{ 
+                backgroundColor: '#10b981', 
+                borderRadius: '50%', 
+                padding: '2px',
+                width: '16px',
+                height: '16px' 
+              }} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Section Content */}
+      <div style={{
+        backgroundColor: 'white',
+        border: '1px solid #e5e7eb',
+        borderRadius: '12px',
+        marginBottom: '20px',
+        minHeight: '400px'
+      }}>
+        {renderSectionContent()}
+      </div>
+
+      {/* Navigation Buttons */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        paddingTop: '20px',
+        borderTop: '1px solid #e5e7eb'
+      }}>
+        <button
+          onClick={handlePrevious}
+          disabled={activeSection === 0}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '12px 20px',
+            backgroundColor: activeSection === 0 ? '#f3f4f6' : '#6b7280',
+            color: activeSection === 0 ? '#9ca3af' : 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: activeSection === 0 ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <FiArrowLeft />
+          Previous
+        </button>
+
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={handleSave}
+            disabled={loading}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px 20px',
+              backgroundColor: '#10b981',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1,
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <FiSave />
+            {loading ? 'Saving...' : 'Save'}
+          </button>
+
+          {showSubmitConfirm ? (
+            <button
+              onClick={handleSubmit}
+              disabled={loading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 24px',
+                backgroundColor: '#dc2626',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <FiCheck />
+              {loading ? 'Submitting...' : 'Submit BGV'}
+            </button>
+          ) : (
+            <button
+              onClick={handleNext}
+              disabled={loading}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                backgroundColor: isLastSection ? '#dc2626' : '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '500',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {loading ? 'Saving...' : (isLastSection ? 'Review & Submit' : 'Next')}
+              <FiArrowRight />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
