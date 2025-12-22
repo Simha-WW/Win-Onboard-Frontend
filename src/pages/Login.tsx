@@ -26,11 +26,24 @@ export const Login: React.FC = () => {
   const isMicrosoftRedirect = urlParams.has('code') || urlParams.has('state') || urlParams.has('session_state') ||
                               urlHash.includes('access_token') || urlHash.includes('id_token') || urlParams.has('error');
 
-  // Clear error when switching modes
+  // Clear all form fields on component mount to prevent cached credentials
+  useEffect(() => {
+    setUsername('');
+    setPassword('');
+    setHREmail('');
+    setShowPassword(false);
+  }, []);
+
+  // Clear error and form fields when switching modes
   useEffect(() => {
     if (error) {
       clearError();
     }
+    // Clear all form fields to prevent autofill/cached credentials
+    setUsername('');
+    setPassword('');
+    setHREmail('');
+    setShowPassword(false);
   }, [loginMode]); // Remove clearError from dependencies to avoid infinite loop
 
   // Handle Microsoft redirect response
@@ -365,6 +378,10 @@ export const Login: React.FC = () => {
               placeholder="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck="false"
               style={{
                 width: '100%',
                 paddingLeft: '2.5rem',
@@ -402,6 +419,7 @@ export const Login: React.FC = () => {
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
               style={{
                 width: '100%',
                 paddingLeft: '2.5rem',
@@ -509,6 +527,10 @@ export const Login: React.FC = () => {
               placeholder="Email Address"
               value={hrEmail}
               onChange={(e) => setHREmail(e.target.value)}
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck="false"
               style={{
                 width: '100%',
                 paddingLeft: '2.5rem',
@@ -546,6 +568,7 @@ export const Login: React.FC = () => {
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
               style={{
                 width: '100%',
                 paddingLeft: '2.5rem',
