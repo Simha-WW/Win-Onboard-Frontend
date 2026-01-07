@@ -8,6 +8,7 @@ import { Navigate } from 'react-router-dom';
 import { FiUser, FiShield, FiEye, FiEyeOff, FiMail, FiLock } from 'react-icons/fi';
 import { useAuth } from '../contexts/AuthContext';
 import { useMsal } from '@azure/msal-react';
+import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 
 export const Login: React.FC = () => {
   const { isAuthenticated, isLoading, error, user, loginWithMicrosoft, loginWithCredentials, loginWithHREmail, clearError } = useAuth();
@@ -255,6 +256,83 @@ export const Login: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // Handle Google OAuth login for admin users
+  const handleGoogleLogin = async (credentialResponse: CredentialResponse) => {
+    if (!credentialResponse.credential) {
+      console.error('No credential received from Google');
+      alert('Google authentication failed. Please try again.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    clearError();
+
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.REACT_APP_API_BASE_URL || 'http://localhost:3000/api';
+      const apiUrl = `${API_BASE_URL}/auth/google`;
+      
+      console.log('🔐 Sending Google token to backend:', apiUrl);
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          token: credentialResponse.credential
+        })
+      });
+
+      const data = await response.json();
+      console.log('Google auth response:', data);
+
+      if (response.ok && data.success) {
+        // Store authentication data
+        localStorage.setItem('auth_token', data.data.token);
+        localStorage.setItem('auth_user', JSON.stringify(data.data.user));
+        
+        console.log('✅ Google authentication successful');
+        console.log('Department:', data.data.user.department);
+        console.log('Role:', data.data.user.role);
+
+        // Navigate to appropriate portal based on department
+        if (data.data.user.department === 'IT') {
+          console.log('Navigating to IT portal');
+          window.location.href = '/it';
+        } else if (data.data.user.department === 'LD') {
+          console.log('Navigating to L&D portal');
+          window.location.href = '/ld';
+        } else if (data.data.user.department === 'HR') {
+          console.log('Navigating to HR portal');
+          window.location.href = '/hr';
+        } else {
+          console.log('Unknown department, reloading');
+          window.location.reload();
+        }
+      } else {
+        // Handle specific error cases
+        if (data.error === 'EMAIL_NOT_REGISTERED') {
+          alert('You are not authorized to access this system.\n\nYour email is not registered as an admin user.\n\nPlease contact your system administrator.');
+        } else if (data.error === 'ACCOUNT_INACTIVE') {
+          alert('Your account has been deactivated.\n\nPlease contact your administrator for assistance.');
+        } else {
+          alert(data.message || 'Authentication failed. Please try again.');
+        }
+      }
+    } catch (error: any) {
+      console.error('❌ Google authentication error:', error);
+      alert('Authentication failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle Google login error
+  const handleGoogleError = () => {
+    console.error('Google login failed');
+    alert('Google authentication failed. Please try again or use email/password login.');
   };
 
   const renderModeSelection = () => (
@@ -639,6 +717,30 @@ export const Login: React.FC = () => {
           {isSubmitting || isLoading ? 'Signing In...' : 'Sign In'}
         </button>
       </form>
+
+      {/* OR Divider */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        margin: '1.5rem 0',
+        gap: '0.5rem'
+      }}>
+        <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }} />
+        <span style={{ color: '#9ca3af', fontSize: '0.875rem', fontWeight: '500' }}>OR</span>
+        <div style={{ flex: 1, height: '1px', backgroundColor: '#e5e7eb' }} />
+      </div>
+
+      {/* Google Login Button */}
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <GoogleLogin
+          onSuccess={handleGoogleLogin}
+          onError={handleGoogleError}
+          text="signin_with"
+          width="100%"
+          size="large"
+          theme="outline"
+        />
+      </div>
 
       {error && (
         <div style={{
