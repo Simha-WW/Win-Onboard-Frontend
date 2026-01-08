@@ -1,6 +1,46 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiCheck, FiX, FiEdit2, FiFileText, FiUpload } from 'react-icons/fi';
+import { FiCheck, FiX, FiEdit2, FiFileText, FiUpload, FiExternalLink } from 'react-icons/fi';
+
+// Helper component for displaying data fields
+const DataField = ({ label, value }: { label: string; value?: string | null }) => (
+  <div>
+    <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>{label}</p>
+    <p style={{ fontSize: '14px', color: '#111827', fontWeight: '500' }}>{value || 'Not provided'}</p>
+  </div>
+);
+
+// Helper component for displaying document links
+const DocumentLink = ({ label, url, fileName }: { label: string; url?: string | null; fileName?: string | null }) => {
+  if (!url) return null;
+  
+  return (
+    <div>
+      <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>{label}</p>
+      <a 
+        href={url} 
+        target="_blank" 
+        rel="noopener noreferrer"
+        style={{ 
+          fontSize: '14px', 
+          color: '#6366f1', 
+          fontWeight: '500',
+          textDecoration: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          cursor: 'pointer'
+        }}
+        onMouseOver={(e) => e.currentTarget.style.textDecoration = 'underline'}
+        onMouseOut={(e) => e.currentTarget.style.textDecoration = 'none'}
+      >
+        <FiFileText size={16} />
+        {fileName || 'View Document'}
+        <FiExternalLink size={14} />
+      </a>
+    </div>
+  );
+};
 
 export const ReviewAndSubmit = () => {
   const navigate = useNavigate();
@@ -226,15 +266,57 @@ export const ReviewAndSubmit = () => {
                 <FiEdit2 size={16} /> Edit
               </button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
-              <DataField label="Full Name" value={`${bgvData.savedDemographics.first_name || ''} ${bgvData.savedDemographics.middle_name || ''} ${bgvData.savedDemographics.last_name || ''}`.trim()} />
-              <DataField label="Date of Birth" value={bgvData.savedDemographics.dob_as_per_records} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+              <DataField label="Salutation" value={bgvData.savedDemographics.salutation} />
+              <DataField label="Full Name" value={bgvData.savedDemographics.name_for_records || `${bgvData.savedDemographics.first_name || ''} ${bgvData.savedDemographics.middle_name || ''} ${bgvData.savedDemographics.last_name || ''}`.trim()} />
+              <DataField label="Date of Birth (Records)" value={bgvData.savedDemographics.dob_as_per_records?.split('T')[0]} />
+              <DataField label="Date of Birth (Celebrated)" value={bgvData.savedDemographics.celebrated_dob?.split('T')[0]} />
               <DataField label="Gender" value={bgvData.savedDemographics.gender} />
               <DataField label="Blood Group" value={bgvData.savedDemographics.blood_group} />
               <DataField label="WhatsApp Number" value={bgvData.savedDemographics.whatsapp_number} />
-              <DataField label="LinkedIn" value={bgvData.savedDemographics.linkedin_url} />
-              <DataField label="PAN Number" value={bgvData.savedDemographics.pan_number} />
-              <DataField label="Aadhaar Number" value={bgvData.savedDemographics.aadhaar_number} />
+              <DataField label="LinkedIn" value={bgvData.savedDemographics.linkedin_url || 'Not provided'} />
+              <DataField label="PAN Number" value={bgvData.savedDemographics.pan_card_number} />
+              <DataField label="Aadhaar Number" value={bgvData.savedDemographics.aadhaar_card_number} />
+            </div>
+            
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Communication Address</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+              <DataField label="House Number" value={bgvData.savedDemographics.comm_house_number} />
+              <DataField label="Street Name" value={bgvData.savedDemographics.comm_street_name} />
+              <DataField label="District" value={bgvData.savedDemographics.comm_district} />
+              <DataField label="City" value={bgvData.savedDemographics.comm_city} />
+              <DataField label="State" value={bgvData.savedDemographics.comm_state} />
+              <DataField label="Pincode" value={bgvData.savedDemographics.comm_pin_code || 'Not provided'} />
+              <DataField label="Country" value={bgvData.savedDemographics.comm_country} />
+            </div>
+            
+            {!bgvData.savedDemographics.perm_same_as_comm && (
+              <>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Permanent Address</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+                  <DataField label="House Number" value={bgvData.savedDemographics.perm_house_number} />
+                  <DataField label="Street Name" value={bgvData.savedDemographics.perm_street_name} />
+                  <DataField label="District" value={bgvData.savedDemographics.perm_district} />
+                  <DataField label="City" value={bgvData.savedDemographics.perm_city} />
+                  <DataField label="State" value={bgvData.savedDemographics.perm_state} />
+                  <DataField label="Pincode" value={bgvData.savedDemographics.perm_pin_code || 'Not provided'} />
+                  <DataField label="Country" value={bgvData.savedDemographics.perm_country} />
+                </div>
+              </>
+            )}
+            {bgvData.savedDemographics.perm_same_as_comm && (
+              <div style={{ padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', marginBottom: '24px' }}>
+                <p style={{ fontSize: '14px', color: '#1e40af', margin: 0 }}>
+                  ℹ️ Permanent address is same as communication address
+                </p>
+              </div>
+            )}
+            
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Uploaded Documents</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+              <DocumentLink label="Aadhaar Card" url={bgvData.savedDemographics.aadhaar_doc_file_url} fileName={bgvData.savedDemographics.aadhaar_file_name} />
+              <DocumentLink label="PAN Card" url={bgvData.savedDemographics.pan_file_url} fileName={bgvData.savedDemographics.pan_file_name} />
+              <DocumentLink label="Resume" url={bgvData.savedDemographics.resume_file_url} fileName={bgvData.savedDemographics.resume_file_name} />
             </div>
           </div>
         )}
@@ -248,20 +330,79 @@ export const ReviewAndSubmit = () => {
             marginBottom: '24px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
           }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '20px' }}>
-              Personal Details
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
-              <DataField label="Marital Status" value={bgvData.savedPersonal.marital_status} />
-              <DataField label="Number of Children" value={bgvData.savedPersonal.num_children?.toString() || '0'} />
-              <DataField label="Father's Name" value={bgvData.savedPersonal.father_name} />
-              <DataField label="Mother's Name" value={bgvData.savedPersonal.mother_name} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827' }}>
+                Personal Details
+              </h2>
+              <button
+                onClick={() => navigate('/dashboard/documents')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  backgroundColor: '#f3f4f6',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                <FiEdit2 size={16} /> Edit
+              </button>
             </div>
+            
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Family Details</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+              <DataField label="Father's Name" value={bgvData.savedPersonal.father_name} />
+              <DataField label="Father's DOB" value={bgvData.savedPersonal.father_dob?.split('T')[0]} />
+              <DataField label="Father Deceased" value={bgvData.savedPersonal.father_deceased ? 'Yes' : 'No'} />
+              <DataField label="Mother's Name" value={bgvData.savedPersonal.mother_name} />
+              <DataField label="Mother's DOB" value={bgvData.savedPersonal.mother_dob?.split('T')[0]} />
+              <DataField label="Mother Deceased" value={bgvData.savedPersonal.mother_deceased ? 'Yes' : 'No'} />
+              <DataField label="Marital Status" value={bgvData.savedPersonal.marital_status} />
+              {bgvData.savedPersonal.marital_status === 'Married' && (
+                <>
+                  <DataField label="Spouse Name" value={bgvData.savedPersonal.spouse_name} />
+                  <DataField label="Spouse DOB" value={bgvData.savedPersonal.spouse_dob?.split('T')[0]} />
+                </>
+              )}
+              <DataField label="Number of Children" value={bgvData.savedPersonal.num_children?.toString() || '0'} />
+              {bgvData.savedPersonal.num_children > 0 && (
+                <>
+                  <DataField label="Child 1 Name" value={bgvData.savedPersonal.child1_name} />
+                  <DataField label="Child 1 DOB" value={bgvData.savedPersonal.child1_dob?.split('T')[0]} />
+                  {bgvData.savedPersonal.num_children > 1 && (
+                    <>
+                      <DataField label="Child 2 Name" value={bgvData.savedPersonal.child2_name} />
+                      <DataField label="Child 2 DOB" value={bgvData.savedPersonal.child2_dob?.split('T')[0]} />
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
+            {bgvData.savedPersonal.emergency_contacts && bgvData.savedPersonal.emergency_contacts.length > 0 && (
+              <>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Emergency Contacts</h3>
+                {bgvData.savedPersonal.emergency_contacts.map((contact: any, index: number) => (
+                  <div key={index} style={{ marginBottom: '16px', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+                    <h4 style={{ fontSize: '14px', fontWeight: '500', color: '#6b7280', marginBottom: '8px' }}>Contact {index + 1}</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
+                      <DataField label="Name" value={contact.contact_person_name} />
+                      <DataField label="Relationship" value={contact.relationship} />
+                      <DataField label="Phone" value={contact.mobile} />
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         )}
 
         {/* Education Section */}
-        {bgvData?.savedEducation && bgvData.savedEducation.length > 0 && (
+        {bgvData?.savedEducation && (bgvData.savedEducation.educationalQualifications?.length > 0 || bgvData.savedEducation.additionalQualifications?.length > 0) && (
           <div style={{ 
             backgroundColor: 'white', 
             borderRadius: '12px', 
@@ -269,29 +410,76 @@ export const ReviewAndSubmit = () => {
             marginBottom: '24px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
           }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '20px' }}>
-              Education
-            </h2>
-            {bgvData.savedEducation.map((edu: any, index: number) => (
-              <div key={index} style={{ 
-                padding: '16px', 
-                backgroundColor: '#f9fafb', 
-                borderRadius: '8px',
-                marginBottom: index < bgvData.savedEducation.length - 1 ? '12px' : '0'
-              }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                  <DataField label="Qualification" value={edu.qualification} />
-                  <DataField label="University/Institution" value={edu.university_institution} />
-                  <DataField label="CGPA/Percentage" value={edu.cgpa_percentage} />
-                  <DataField label="Year of Passing" value={edu.year_of_passing?.toString()} />
-                </div>
-              </div>
-            ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827' }}>
+                Education
+              </h2>
+              <button
+                onClick={() => navigate('/dashboard/documents')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  backgroundColor: '#f3f4f6',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                <FiEdit2 size={16} /> Edit
+              </button>
+            </div>
+            
+            {bgvData.savedEducation.educationalQualifications && bgvData.savedEducation.educationalQualifications.length > 0 && (
+              <>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Educational Qualifications</h3>
+                {bgvData.savedEducation.educationalQualifications.map((edu: any, index: number) => (
+                  <div key={index} style={{ 
+                    padding: '16px', 
+                    backgroundColor: '#f9fafb', 
+                    borderRadius: '8px',
+                    marginBottom: index < bgvData.savedEducation.educationalQualifications.length - 1 ? '12px' : '0'
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                      <DataField label="Qualification" value={edu.qualification} />
+                      <DataField label="University/Institution" value={edu.university_institution} />
+                      <DataField label="CGPA/Percentage" value={edu.cgpa_percentage} />
+                      <DataField label="Year of Passing" value={edu.year_of_passing?.toString()} />
+                      {edu.documentUrl && <DocumentLink label="Certificate" url={edu.documentUrl} fileName={edu.documentName} />}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {bgvData.savedEducation.additionalQualifications && bgvData.savedEducation.additionalQualifications.length > 0 && (
+              <>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px', marginTop: '24px' }}>Additional Certificates</h3>
+                {bgvData.savedEducation.additionalQualifications.map((cert: any, index: number) => (
+                  <div key={index} style={{ 
+                    padding: '16px', 
+                    backgroundColor: '#f9fafb', 
+                    borderRadius: '8px',
+                    marginBottom: index < bgvData.savedEducation.additionalQualifications.length - 1 ? '12px' : '0'
+                  }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                      <DataField label="Certificate Name" value={cert.qualification} />
+                      <DataField label="Issuing Organization" value={cert.university_institution} />
+                      <DataField label="Year Obtained" value={cert.year_of_passing?.toString()} />
+                      {cert.documentUrl && <DocumentLink label="Certificate" url={cert.documentUrl} fileName={cert.documentName} />}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         )}
 
         {/* Employment Section */}
-        {bgvData?.savedEmployment && bgvData.savedEmployment.length > 0 && (
+        {bgvData?.savedEmployment?.employmentHistory && bgvData.savedEmployment.employmentHistory.length > 0 && (
           <div style={{ 
             backgroundColor: 'white', 
             borderRadius: '12px', 
@@ -299,20 +487,50 @@ export const ReviewAndSubmit = () => {
             marginBottom: '24px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
           }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '20px' }}>
-              Employment History
-            </h2>
-            {bgvData.savedEmployment.map((emp: any, index: number) => (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827' }}>
+                Employment History
+              </h2>
+              <button
+                onClick={() => navigate('/dashboard/documents')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  backgroundColor: '#f3f4f6',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                <FiEdit2 size={16} /> Edit
+              </button>
+            </div>
+            {bgvData.savedEmployment.employmentHistory.map((emp: any, index: number) => (
               <div key={index} style={{ 
                 padding: '16px', 
                 backgroundColor: '#f9fafb', 
                 borderRadius: '8px',
-                marginBottom: index < bgvData.savedEmployment.length - 1 ? '12px' : '0'
+                marginBottom: index < bgvData.savedEmployment.employmentHistory.length - 1 ? '12px' : '0'
               }}>
+                <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>
+                  {emp.company_name || `Employment ${index + 1}`}
+                </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
                   <DataField label="Company" value={emp.company_name} />
                   <DataField label="Designation" value={emp.designation} />
-                  <DataField label="Duration" value={`${emp.from_date} to ${emp.to_date || 'Present'}`} />
+                  <DataField label="From Date" value={emp.from_date} />
+                  <DataField label="To Date" value={emp.to_date || 'Present'} />
+                  <DataField label="Reason for Leaving" value={emp.reason_for_leaving} />
+                  <DataField label="HR Name" value={emp.hr_name} />
+                  <DataField label="HR Email" value={emp.hr_email} />
+                  <DataField label="HR Phone" value={emp.hr_phone} />
+                  {emp.offer_letter_url && <DocumentLink label="Offer Letter" url={emp.offer_letter_url} fileName={emp.offer_letter_name} />}
+                  {emp.experience_letter_url && <DocumentLink label="Experience Letter" url={emp.experience_letter_url} fileName={emp.experience_letter_name} />}
+                  {emp.payslip_url && <DocumentLink label="Payslips" url={emp.payslip_url} fileName={emp.payslip_name} />}
                 </div>
               </div>
             ))}
@@ -328,19 +546,52 @@ export const ReviewAndSubmit = () => {
             marginBottom: '24px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
           }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '20px' }}>
-              Passport & Visa
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827' }}>
+                Passport & Visa
+              </h2>
+              <button
+                onClick={() => navigate('/dashboard/documents')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  backgroundColor: '#f3f4f6',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                <FiEdit2 size={16} /> Edit
+              </button>
+            </div>
+            
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Passport Details</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
               <DataField label="Has Passport" value={bgvData.savedPassportVisa.has_passport ? 'Yes' : 'No'} />
               {bgvData.savedPassportVisa.has_passport && (
                 <>
                   <DataField label="Passport Number" value={bgvData.savedPassportVisa.passport_number} />
-                  <DataField label="Issue Date" value={bgvData.savedPassportVisa.passport_issue_date} />
-                  <DataField label="Expiry Date" value={bgvData.savedPassportVisa.passport_expiry_date} />
+                  <DataField label="Issue Date" value={bgvData.savedPassportVisa.passport_issue_date?.split('T')[0]} />
+                  <DataField label="Expiry Date" value={bgvData.savedPassportVisa.passport_expiry_date?.split('T')[0]} />
+                  <DocumentLink label="Passport Copy" url={bgvData.savedPassportVisa.passport_copy_url} fileName={bgvData.savedPassportVisa.passport_copy_name} />
                 </>
               )}
+            </div>
+            
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Visa Details</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
               <DataField label="Has Visa" value={bgvData.savedPassportVisa.has_visa ? 'Yes' : 'No'} />
+              {bgvData.savedPassportVisa.has_visa && (
+                <>
+                  <DataField label="Visa Type" value={bgvData.savedPassportVisa.visa_type} />
+                  <DataField label="Visa Country" value={bgvData.savedPassportVisa.visa_country} />
+                  <DocumentLink label="Visa Document" url={bgvData.savedPassportVisa.visa_document_url} fileName={bgvData.savedPassportVisa.visa_document_name} />
+                </>
+              )}
             </div>
           </div>
         )}
@@ -354,15 +605,43 @@ export const ReviewAndSubmit = () => {
             marginBottom: '24px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
           }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827', marginBottom: '20px' }}>
-              Banking & PF Details
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827' }}>
+                Banking, PF & NPS Details
+              </h2>
+              <button
+                onClick={() => navigate('/dashboard/documents')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 16px',
+                  backgroundColor: '#f3f4f6',
+                  border: 'none',
+                  borderRadius: '8px',
+                  color: '#374151',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                <FiEdit2 size={16} /> Edit
+              </button>
+            </div>
+            
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>Bank Details</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+              <DataField label="Account Holder Name" value={bgvData.savedBankPfNps.name_as_per_bank} />
               <DataField label="Bank Name" value={bgvData.savedBankPfNps.bank_name} />
               <DataField label="Branch" value={bgvData.savedBankPfNps.branch} />
               <DataField label="Account Number" value={bgvData.savedBankPfNps.bank_account_number} />
               <DataField label="IFSC Code" value={bgvData.savedBankPfNps.ifsc_code} />
-              <DataField label="Account Holder Name" value={bgvData.savedBankPfNps.name_as_per_bank} />
+              <DocumentLink label="Cancelled Cheque" url={bgvData.savedBankPfNps.cancelled_cheque_url} fileName="Cancelled Cheque" />
+            </div>
+            
+            <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>PF & NPS Details</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+              <DataField label="UAN/PF Number" value={bgvData.savedBankPfNps.uan_pf_number} />
+              <DataField label="PRAN/NPS Number" value={bgvData.savedBankPfNps.pran_nps_number} />
             </div>
           </div>
         )}
@@ -565,14 +844,3 @@ export const ReviewAndSubmit = () => {
   );
 };
 
-// Helper component for displaying data fields
-const DataField = ({ label, value }: { label: string; value: string | null | undefined }) => (
-  <div>
-    <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px', fontWeight: '500' }}>
-      {label}
-    </p>
-    <p style={{ fontSize: '14px', color: '#111827', fontWeight: '500' }}>
-      {value || 'N/A'}
-    </p>
-  </div>
-);

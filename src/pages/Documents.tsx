@@ -1419,7 +1419,9 @@ export const Documents = () => {
           return;
       }
 
-      const response = await fetch(`http://localhost:3000${apiEndpoint}`, {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.REACT_APP_API_BASE_URL || 'http://localhost:3000/api';
+      const baseUrl = API_BASE_URL.replace('/api', '');
+      const response = await fetch(`${baseUrl}${apiEndpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
